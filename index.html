@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TB1 - Planificador de Obras Civiles | Joseph</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+
+        <header>
+            <h1>🏗️ Planificador de Obras Civiles - TB1</h1>
+            <p>Planificación y Control de Obras - C1579</p>
+        </header>
+
+        <!-- Pestañas -->
+        <div class="tabs">
+            <button class="tab active" onclick="openTab(0)">📅 Cronograma + Gantt + Ruta Crítica</button>
+            <button class="tab" onclick="openTab(1)">📊 Valor Ganado (EVM)</button>
+        </div>
+
+        <!-- ==================== TAB 0: CRONOGRAMA ==================== -->
+        <div id="tab0" class="tab-content">
+
+            <section class="card">
+                <h2>Datos del Proyecto</h2>
+                <div class="grid">
+                    <div>
+                        <label>Nombre del Proyecto</label>
+                        <input type="text" id="nombreProyecto" placeholder="Ej. Edificio Multifamiliar">
+                    </div>
+                    <div>
+                        <label>Fecha de Inicio</label>
+                        <input type="date" id="fechaInicioProyecto">
+                    </div>
+                    <div>
+                        <label>Unidad de Tiempo</label>
+                        <select id="unidadTiempo">
+                            <option value="dias">Días</option>
+                            <option value="semanas">Semanas</option>
+                            <option value="meses">Meses</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Registro de Actividades</h2>
+                <div class="grid">
+                    <div>
+                        <label>Nombre de la Actividad</label>
+                        <input type="text" id="actividad" placeholder="Ej. Excavación de zanjas">
+                    </div>
+                    <div>
+                        <label>Duración</label>
+                        <input type="number" id="duracion" min="1" placeholder="5">
+                    </div>
+                    <div>
+                        <label>Predecesoras (Ctrl + Click para varias)</label>
+                        <select id="dependencia" multiple size="5" style="height: 110px;">
+                            <!-- Se llena automáticamente -->
+                        </select>
+                        <small style="color:#666; display:block; margin-top:5px;">
+                            Mantén presionado <strong>Ctrl</strong> (o Cmd en Mac) para seleccionar varias predecesoras
+                        </small>
+                    </div>
+                </div>
+                <button onclick="agregarActividad()">+ Agregar Actividad</button>
+            </section>
+
+            <section class="card">
+                <h2>Cronograma del Proyecto</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Letra</th>
+                            <th>Actividad</th>
+                            <th>Duración</th>
+                            <th>Predecesoras</th>
+                            <th>ES</th>
+                            <th>EF</th>
+                            <th>LS</th>
+                            <th>LF</th>
+                            <th>Holgura</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaActividades"></tbody>
+                </table>
+            </section>
+
+            <section class="card">
+                <h2>Diagrama de Gantt</h2>
+                <div id="ganttContainer" style="overflow-x: auto; border: 1px solid #ddd; padding: 10px; background: #fafafa; min-height: 350px;"></div>
+            </section>
+
+            <section class="card">
+                <h2>Ruta Crítica</h2>
+                <div id="rutaCritica" style="padding: 20px; background: #f0f0f0; border-radius: 8px; font-size: 1.1rem;">
+                    Agrega actividades y predecesoras para calcular la ruta crítica...
+                </div>
+            </section>
+
+            <section class="card exportacion">
+                <button onclick="exportarCSV()">📥 Exportar CSV</button>
+            </section>
+
+        </div>
+
+        <!-- ==================== TAB 1: EVM ==================== -->
+        <div id="tab1" class="tab-content" style="display: none;">
+            <section class="card">
+                <h2>Análisis de Valor Ganado (EVM)</h2>
+                <div class="grid">
+                    <div>
+                        <label>Planned Value (PV)</label>
+                        <input type="number" id="pv" value="150000" oninput="calcularEVM()">
+                    </div>
+                    <div>
+                        <label>Earned Value (EV)</label>
+                        <input type="number" id="ev" value="120000" oninput="calcularEVM()">
+                    </div>
+                    <div>
+                        <label>Actual Cost (AC)</label>
+                        <input type="number" id="ac" value="135000" oninput="calcularEVM()">
+                    </div>
+                </div>
+
+                <div class="resultados-evm">
+                    <h3>Indicadores</h3>
+                    <p><strong>CPI:</strong> <span id="cpi">0.00</span></p>
+                    <p><strong>SPI:</strong> <span id="spi">0.00</span></p>
+                    <p><strong>CV (Costo):</strong> S/. <span id="cv">0</span></p>
+                    <p><strong>SV (Plazo):</strong> S/. <span id="sv">0</span></p>
+                </div>
+            </section>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+
+    <script>
+        function openTab(n) {
+            document.getElementById('tab0').style.display = n === 0 ? 'block' : 'none';
+            document.getElementById('tab1').style.display = n === 1 ? 'block' : 'none';
+            
+            document.querySelectorAll('.tab').forEach((tab, index) => {
+                tab.classList.toggle('active', index === n);
+            });
+        }
+
+        window.onload = () => {
+            openTab(0);
+        };
+    </script>
+</body>
+</html>
