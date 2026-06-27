@@ -150,9 +150,9 @@
                     <input type="number" id="presupuesto" min="0" step="0.01" placeholder="1000">
                 </div>
                 <div>
-                    <label data-i18n="predecessors">Predecesoras (Ctrl + Click)</label>
-                    <select id="dependencia" multiple size="5"></select>
-                    <small class="hint" data-i18n="predecessorsHint">Ctrl para varias</small>
+                    <label data-i18n="predecessors">Predecesoras</label>
+                    <input type="text" id="dependencia" placeholder="Ej. 1FC, 2CC+2">
+                    <small class="hint" data-i18n="predecessorsHint">FC, CC, FF o CF. Ej: 1, 2CC+1, 3FF+2. Por defecto FC.</small>
                 </div>
             </div>
             <div class="acciones-grupo no-print">
@@ -189,6 +189,13 @@
         <section class="card">
             <h2 data-i18n="ganttTitle">Diagrama de Gantt</h2>
             <p class="subtitle" id="ganttHintText" data-i18n="ganttHintPlanned">Modo planificado: los % deben sumar 100% por actividad.</p>
+            <div class="toggle-row gantt-opciones no-print">
+                <label class="toggle-label">
+                    <input type="checkbox" id="trabajarEnHolgura">
+                    <span data-i18n="workInSlack">Trabajar en holgura (% distribuido en trabajo + holgura)</span>
+                </label>
+                <small class="hint" data-i18n="workInSlackHint">Sin check: 100% solo en días de trabajo (ej. 5 días = 20% c/u). Con check: 100% en trabajo + holgura (ej. 10 días = 10% c/u).</small>
+            </div>
             <div class="leyenda-gantt">
                 <div class="leyenda-item"><span class="cuadro-azul"></span> <span data-i18n="legendWork">Trabajo</span></div>
                 <div class="leyenda-item"><span class="cuadro-celeste"></span> <span data-i18n="legendSlack">Holgura</span></div>
@@ -326,7 +333,7 @@
 </div>
 
 <!-- Modal Editar Actividad -->
-<div id="modalEditar" class="modal-overlay no-print" style="display:none;">
+<div id="modalEditar" class="modal-overlay no-print">
     <div class="modal-card">
         <h3 data-i18n="editActivity">Editar Actividad</h3>
         <input type="hidden" id="editActId">
@@ -345,7 +352,8 @@
             </div>
             <div>
                 <label data-i18n="predecessors">Predecesoras</label>
-                <select id="editPredecesoras" multiple size="5"></select>
+                <input type="text" id="editPredecesoras" placeholder="Ej. 1FC, 2CC+2">
+                <small class="hint" data-i18n="predecessorsHint">FC, CC, FF o CF. Ej: 1, 2CC+1. Por defecto FC.</small>
             </div>
         </div>
         <div class="acciones-grupo" style="margin-top:16px;">
