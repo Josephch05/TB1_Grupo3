@@ -16,10 +16,12 @@ let escenarioETC = 'probable';
 let holguraPorcentaje = false;
 let calendarioActivo = false;
 let diasLaborables = [1, 2, 3, 4, 5];
-let anioFeriados = new Date().getFullYear();
 let feriadosCache = [];
 let diasNoLaborablesCustom = [];
-let bitacoraHtml = '';
+let bitacoraNotas = [{ id: 1, titulo: 'Nota 1', html: '' }];
+let bitacoraNotaActiva = 1;
+let bitacoraSiguienteId = 2;
+let bitacoraPanelAbierto = false;
 let tabActual = 0;
 let mapaCalendario = [];
 let diasCalendarioGantt = [];
@@ -34,7 +36,7 @@ const traducciones = {
         appTitle: 'Planificador de Obras Civiles - TB1',
         appSubtitle: 'Planificación y Control de Obras - CI579',
         tabSchedule: 'Cronograma + Gantt', tabEVM: 'Valor Ganado + Análisis',
-        tabInforme: 'Informe Ejecutivo', tabBitacora: 'Bitácora',
+        tabInforme: 'Informe Ejecutivo', tabBitacora: 'Bitácora', tabLog: 'Bitácora del Proyecto',
         projectData: 'Datos del Proyecto', projectName: 'Nombre del Proyecto',
         startDate: 'Fecha de Inicio', timeUnit: 'Unidad de Tiempo',
         days: 'Días', weeks: 'Semanas', months: 'Meses',
@@ -91,9 +93,14 @@ const traducciones = {
         saveProject: 'Guardar proyecto', loadProject: 'Cargar proyecto',
         exportJSON: 'Exportar JSON', loadExample: 'Cargar ejemplo',
         calendarTitle: 'Calendario Laboral',
-        calendarHint: 'Activo solo con unidad «Días». Omite fines de semana, feriados y días personalizados.',
-        calendarActive: 'Activar calendario laboral', holidayYear: 'Año de feriados',
-        holidayDepts: 'Departamentos (feriados regionales)', workDays: 'Días laborables de la semana:',
+        calendarHint: 'Activo solo con unidad «Días». Calcula feriados automáticamente desde la fecha de inicio hasta el fin del cronograma.',
+        calendarActive: 'Activar calendario laboral',
+        calendarRange: 'Período del calendario',
+        calendarRangeEmpty: 'Defina fecha de inicio y actividades para calcular feriados automáticamente.',
+        calendarRangeLabel: 'Feriados considerados del {inicio} al {fin}',
+        calendarDept: 'Departamentos (feriados regionales)',
+        calendarDeptHint: 'Ctrl+Click para varios. Vacío = todos',
+        workDays: 'Días laborables de la semana:',
         daySun: 'Dom', dayMon: 'Lun', dayTue: 'Mar', dayWed: 'Mié', dayThu: 'Jue', dayFri: 'Vie', daySat: 'Sáb',
         customNonWorkDate: 'Fecha no laborable', customNonWorkDesc: 'Descripción', addNonWorkDay: '+ Agregar',
         validationTitle: 'Validaciones del proyecto', validationOk: 'Proyecto válido. Sin errores.',
@@ -108,6 +115,8 @@ const traducciones = {
         refreshReport: 'Actualizar informe',
         bitacoraHint: 'Registro de observaciones, incidencias y decisiones. Se guarda automáticamente.',
         exportBitacoraTXT: 'Exportar TXT', exportBitacoraPDF: 'Exportar PDF', exportBitacoraWord: 'Exportar Word',
+        exportLogTxt: 'Exportar TXT', exportLogPdf: 'Exportar PDF', exportLogWord: 'Exportar Word',
+        logHint: 'Registro de observaciones con múltiples notas. Se guarda automáticamente.',
         valNoStartDate: 'Falta fecha de inicio del proyecto.',
         valNoActivities: 'No hay actividades registradas.',
         valCyclicDeps: 'Dependencias cíclicas detectadas.',
@@ -120,7 +129,7 @@ const traducciones = {
         appTitle: 'Civil Works Planner - TB1',
         appSubtitle: 'Planning and Control - CI579',
         tabSchedule: 'Schedule + Gantt', tabEVM: 'Earned Value + Analysis',
-        tabInforme: 'Executive Report', tabBitacora: 'Logbook',
+        tabInforme: 'Executive Report', tabBitacora: 'Logbook', tabLog: 'Project Logbook',
         projectData: 'Project Data', projectName: 'Project Name',
         startDate: 'Start Date', timeUnit: 'Time Unit',
         days: 'Days', weeks: 'Weeks', months: 'Months',
@@ -177,9 +186,14 @@ const traducciones = {
         saveProject: 'Save project', loadProject: 'Load project',
         exportJSON: 'Export JSON', loadExample: 'Load example',
         calendarTitle: 'Work Calendar',
-        calendarHint: 'Active only with «Days» unit. Skips weekends, holidays and custom days.',
-        calendarActive: 'Enable work calendar', holidayYear: 'Holiday year',
-        holidayDepts: 'Departments (regional holidays)', workDays: 'Work days of the week:',
+        calendarHint: 'Active only with «Days» unit. Auto-calculates holidays from project start through schedule end.',
+        calendarActive: 'Enable work calendar',
+        calendarRange: 'Calendar period',
+        calendarRangeEmpty: 'Set start date and activities to auto-calculate holidays.',
+        calendarRangeLabel: 'Holidays from {inicio} to {fin}',
+        calendarDept: 'Departments (regional holidays)',
+        calendarDeptHint: 'Ctrl+Click for multiple. Empty = all',
+        workDays: 'Work days of the week:',
         daySun: 'Sun', dayMon: 'Mon', dayTue: 'Tue', dayWed: 'Wed', dayThu: 'Thu', dayFri: 'Fri', daySat: 'Sat',
         customNonWorkDate: 'Non-work date', customNonWorkDesc: 'Description', addNonWorkDay: '+ Add',
         validationTitle: 'Project validations', validationOk: 'Project valid. No errors.',
@@ -194,6 +208,8 @@ const traducciones = {
         refreshReport: 'Refresh report',
         bitacoraHint: 'Log of observations, incidents and decisions. Auto-saved.',
         exportBitacoraTXT: 'Export TXT', exportBitacoraPDF: 'Export PDF', exportBitacoraWord: 'Export Word',
+        exportLogTxt: 'Export TXT', exportLogPdf: 'Export PDF', exportLogWord: 'Export Word',
+        logHint: 'Observations log with multiple notes. Auto-saved.',
         valNoStartDate: 'Project start date missing.',
         valNoActivities: 'No activities registered.',
         valCyclicDeps: 'Cyclic dependencies detected.',
@@ -268,11 +284,18 @@ function esCalendarioAplicable() {
     return calendarioActivo && unidadTiempo === 'dias' && projectStartDate;
 }
 
+function isoLocal(fecha) {
+    if (typeof fechaALocalISO === 'function') return fechaALocalISO(fecha);
+    if (!fecha) return null;
+    const f = fecha instanceof Date ? fecha : new Date(fecha + 'T00:00:00');
+    return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
+}
+
 function esDiaLaborable(fecha) {
     const f = fecha instanceof Date ? new Date(fecha) : new Date(fecha + 'T00:00:00');
     const dow = f.getDay();
     if (!diasLaborables.includes(dow)) return false;
-    const iso = f.toISOString().slice(0, 10);
+    const iso = isoLocal(f);
     if (diasNoLaborablesCustom.some(d => d.fecha === iso)) return false;
     if (feriadosCache.some(h => h.fecha === iso)) return false;
     return true;
@@ -336,12 +359,56 @@ function getPeriodoDesdeIndiceGantt(idx) {
     return -1;
 }
 
-function actualizarFeriados() {
-    if (typeof obtenerTodosFeriadosPeru !== 'function') return;
+function estimarFechaFinProyecto() {
+    if (!projectStartDate) return null;
+    const maxP = Math.max(...actividades.map(a => a.EF), 0);
+    const fin = new Date(projectStartDate);
+    if (!maxP) return fin;
+    fin.setDate(fin.getDate() + maxP * 2 + 400);
+    return fin;
+}
+
+function getFechaFinProyectoReal() {
+    if (mapaCalendario.length) return mapaCalendario[mapaCalendario.length - 1];
+    if (!projectStartDate) return null;
+    const maxP = Math.max(...actividades.map(a => a.EF), 0);
+    if (!maxP) return new Date(projectStartDate);
+    const fin = new Date(projectStartDate);
+    fin.setDate(fin.getDate() + Math.max(0, maxP - 1) * diasPorPeriodo());
+    return fin;
+}
+
+function actualizarFeriados(usarEstimacion) {
+    if (typeof obtenerFeriadosEnRango !== 'function') return;
     const sel = document.getElementById('departamentosFeriados');
     const deps = sel ? Array.from(sel.selectedOptions).map(o => o.value) : [];
-    feriadosCache = obtenerTodosFeriadosPeru(anioFeriados, deps.length ? deps : undefined);
+    const depArg = deps.length ? deps : undefined;
+    const isoInicio = isoLocal(projectStartDate);
+    if (!isoInicio) {
+        feriadosCache = [];
+        renderListaFeriados();
+        actualizarTextoRangoCalendario();
+        return;
+    }
+    const finDate = usarEstimacion ? estimarFechaFinProyecto() : getFechaFinProyectoReal();
+    const isoFin = isoLocal(finDate) || isoInicio;
+    feriadosCache = obtenerFeriadosEnRango(isoInicio, isoFin, depArg);
     renderListaFeriados();
+    actualizarTextoRangoCalendario(isoInicio, isoFin);
+}
+
+function actualizarTextoRangoCalendario(isoInicio, isoFin) {
+    const el = document.getElementById('calendarioRangoTexto');
+    if (!el) return;
+    if (!isoInicio || !projectStartDate) {
+        el.textContent = t('calendarRangeEmpty');
+        return;
+    }
+    const fin = isoFin || isoInicio;
+    const txt = t('calendarRangeLabel')
+        .replace('{inicio}', formatearFecha(isoInicio + 'T00:00:00'))
+        .replace('{fin}', formatearFecha(fin + 'T00:00:00'));
+    el.textContent = `${txt} (${feriadosCache.length} ${idioma === 'es' ? 'feriados' : 'holidays'})`;
 }
 
 function renderListaFeriados() {
@@ -350,9 +417,12 @@ function renderListaFeriados() {
     const items = [...feriadosCache];
     diasNoLaborablesCustom.forEach(d => items.push({ fecha: d.fecha, nombre: d.desc || (idioma === 'es' ? 'Personalizado' : 'Custom'), tipo: 'custom' }));
     items.sort((a, b) => a.fecha.localeCompare(b.fecha));
-    el.innerHTML = items.map(f =>
-        `<div class="feriado-item"><strong>${f.fecha}</strong> — ${f.nombre}${f.tipo === 'custom' ? ` <button class="btn-eliminar" onclick="eliminarDiaNoLaborable('${f.fecha}')">×</button>` : ''}</div>`
-    ).join('') || `<div class="feriado-item">${idioma === 'es' ? 'Sin feriados' : 'No holidays'}</div>`;
+    el.innerHTML = items.map(f => {
+        const tipoCls = f.tipo === 'nacional' ? 'feriado-tipo-nacional' : f.tipo === 'regional' ? 'feriado-tipo-regional' : '';
+        const tipoLbl = f.tipo === 'nacional' ? (idioma === 'es' ? 'Nacional' : 'National')
+            : f.tipo === 'regional' ? (idioma === 'es' ? 'Regional' : 'Regional') : '';
+        return `<div class="feriado-item"><strong>${f.fecha}</strong> — ${f.nombre}${tipoLbl ? ` <span class="${tipoCls}">[${tipoLbl}]</span>` : ''}${f.tipo === 'custom' ? ` <button class="btn-eliminar" onclick="eliminarDiaNoLaborable('${f.fecha}')">×</button>` : ''}</div>`;
+    }).join('') || `<div class="feriado-item">${idioma === 'es' ? 'Sin feriados en el período del proyecto' : 'No holidays in project period'}</div>`;
 }
 
 function inicializarCalendarioUI() {
@@ -360,9 +430,7 @@ function inicializarCalendarioUI() {
     if (sel && typeof DEPARTAMENTOS_PERU !== 'undefined') {
         sel.innerHTML = DEPARTAMENTOS_PERU.map(d => `<option value="${d}" selected>${d}</option>`).join('');
     }
-    const anioEl = document.getElementById('anioFeriados');
-    if (anioEl) anioEl.value = anioFeriados;
-    actualizarFeriados();
+    actualizarFeriados(true);
 }
 
 function agregarDiaNoLaborable() {
@@ -489,8 +557,8 @@ function getEstadoProyecto() {
         projectStartDate: projectStartDate ? projectStartDate.toISOString().slice(0, 10) : null,
         nombreProyecto: document.getElementById('nombreProyecto')?.value || '',
         unidadTiempo, modoAvance, idioma, moneda, periodosEVM, diaCorte, escenarioETC,
-        holguraPorcentaje, calendarioActivo, diasLaborables, anioFeriados,
-        diasNoLaborablesCustom, bitacoraHtml
+        holguraPorcentaje, calendarioActivo, diasLaborables,
+        diasNoLaborablesCustom, bitacoraNotas, bitacoraNotaActiva, bitacoraSiguienteId
     };
 }
 
@@ -510,9 +578,16 @@ function aplicarEstadoProyecto(estado) {
     holguraPorcentaje = !!estado.holguraPorcentaje;
     calendarioActivo = !!estado.calendarioActivo;
     diasLaborables = estado.diasLaborables || [1, 2, 3, 4, 5];
-    anioFeriados = estado.anioFeriados || new Date().getFullYear();
     diasNoLaborablesCustom = estado.diasNoLaborablesCustom || [];
-    bitacoraHtml = estado.bitacoraHtml || '';
+    if (estado.bitacoraNotas?.length) {
+        bitacoraNotas = estado.bitacoraNotas;
+        bitacoraNotaActiva = estado.bitacoraNotaActiva || bitacoraNotas[0].id;
+        bitacoraSiguienteId = estado.bitacoraSiguienteId || (Math.max(...bitacoraNotas.map(n => n.id)) + 1);
+    } else if (estado.bitacoraHtml) {
+        bitacoraNotas = [{ id: 1, titulo: 'Nota 1', html: estado.bitacoraHtml }];
+        bitacoraNotaActiva = 1;
+        bitacoraSiguienteId = 2;
+    }
     document.getElementById('unidadTiempo').value = unidadTiempo;
     document.getElementById('modoAvance').value = modoAvance;
     document.getElementById('idioma').value = idioma;
@@ -522,11 +597,11 @@ function aplicarEstadoProyecto(estado) {
     if (holgEl) holgEl.checked = holguraPorcentaje;
     const calEl = document.getElementById('calendarioActivo');
     if (calEl) { calEl.checked = calendarioActivo; togglePanelCalendario(); }
-    document.querySelectorAll('.dia-lab input[data-dow]').forEach(cb => {
-        cb.checked = diasLaborables.includes(parseInt(cb.dataset.dow));
+    document.querySelectorAll('.dia-lab').forEach(cb => {
+        cb.checked = diasLaborables.includes(parseInt(cb.value));
     });
-    if (document.getElementById('anioFeriados')) document.getElementById('anioFeriados').value = anioFeriados;
-    actualizarFeriados();
+    actualizarFeriados(true);
+    renderBitacoraTabs();
     sincronizarBitacoraUI();
     actualizarSelectDependencias();
     cambiarIdioma();
@@ -579,8 +654,10 @@ function cargarProyectoEjemplo() {
         ],
         periodosEVM: [], diaCorte: 1, escenarioETC: 'probable',
         holguraPorcentaje: false, calendarioActivo: false,
-        diasLaborables: [1, 2, 3, 4, 5], anioFeriados: hoy.getFullYear(),
-        diasNoLaborablesCustom: [], bitacoraHtml: ''
+        diasLaborables: [1, 2, 3, 4, 5],
+        diasNoLaborablesCustom: [],
+        bitacoraNotas: [{ id: 1, titulo: 'Nota 1', html: '' }],
+        bitacoraNotaActiva: 1, bitacoraSiguienteId: 2
     });
 }
 
@@ -633,17 +710,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (holgEl) holgEl.addEventListener('change', e => { holguraPorcentaje = e.target.checked; renderTabla(); });
     const calEl = document.getElementById('calendarioActivo');
     if (calEl) calEl.addEventListener('change', e => { calendarioActivo = e.target.checked; togglePanelCalendario(); calcularTodo(); });
-    document.getElementById('anioFeriados')?.addEventListener('change', e => { anioFeriados = parseInt(e.target.value) || anioFeriados; actualizarFeriados(); calcularTodo(); });
-    document.getElementById('departamentosFeriados')?.addEventListener('change', () => { actualizarFeriados(); calcularTodo(); });
-    document.querySelectorAll('.dia-lab input[data-dow]').forEach(cb => {
+    document.getElementById('departamentosFeriados')?.addEventListener('change', () => { actualizarFeriados(true); calcularTodo(); });
+    document.querySelectorAll('.dia-lab').forEach(cb => {
         cb.addEventListener('change', () => {
-            diasLaborables = Array.from(document.querySelectorAll('.dia-lab input[data-dow]:checked')).map(c => parseInt(c.dataset.dow));
+            diasLaborables = Array.from(document.querySelectorAll('.dia-lab:checked')).map(c => parseInt(c.value));
             if (!diasLaborables.length) diasLaborables = [1, 2, 3, 4, 5];
             calcularTodo();
         });
     });
     document.getElementById('modalEditar')?.addEventListener('click', e => { if (e.target.id === 'modalEditar') cerrarModalEditar(); });
-    document.getElementById('modalBitacora')?.addEventListener('click', e => { if (e.target.id === 'modalBitacora') cerrarModalBitacora(); });
     inicializarCalendarioUI();
     inicializarBitacora();
     iniciarAutoSave();
@@ -652,7 +727,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (saved) aplicarEstadoProyecto(JSON.parse(saved));
         else {
             const bit = localStorage.getItem(BITACORA_KEY);
-            if (bit) { bitacoraHtml = bit; sincronizarBitacoraUI(); }
+            if (bit) {
+                try {
+                    const parsed = JSON.parse(bit);
+                    if (parsed.notas) {
+                        bitacoraNotas = parsed.notas;
+                        bitacoraNotaActiva = parsed.activa || 1;
+                        bitacoraSiguienteId = parsed.siguienteId || 2;
+                    } else {
+                        bitacoraNotas = [{ id: 1, titulo: 'Nota 1', html: bit }];
+                    }
+                } catch (_) {
+                    bitacoraNotas = [{ id: 1, titulo: 'Nota 1', html: bit }];
+                }
+                renderBitacoraTabs();
+                sincronizarBitacoraUI();
+            }
         }
     } catch (e) { /* ignore */ }
     openTab(0);
@@ -666,7 +756,7 @@ function actualizarHintGantt() {
 
 function openTab(n) {
     tabActual = n;
-    for (let i = 0; i <= 3; i++) {
+    for (let i = 0; i <= 2; i++) {
         const tab = document.getElementById('tab' + i);
         if (tab) tab.style.display = n === i ? 'block' : 'none';
     }
@@ -678,7 +768,6 @@ function openTab(n) {
         renderGantt();
     }
     if (n === 2) generarInformeEjecutivo();
-    if (n === 3) sincronizarBitacoraUI();
 }
 
 function cambiarIdioma() {
@@ -692,6 +781,9 @@ function cambiarIdioma() {
     mostrarRutaCritica();
     renderTablaEVM();
     generarAnalisisGerencial();
+    renderBitacoraTabs();
+    crearToolbarBitacora('bitacoraToolbar');
+    actualizarTextoRangoCalendario(isoLocal(projectStartDate), isoLocal(getFechaFinProyectoReal()));
 }
 
 function onCorteChange() {
@@ -853,6 +945,7 @@ function calcularTodo() {
     if (!actividades.length || !projectStartDate) {
         mapaCalendario = [];
         diasCalendarioGantt = [];
+        actualizarFeriados(true);
         renderTabla();
         renderGantt();
         document.getElementById('rutaCritica').textContent = t('criticalPathEmpty');
@@ -864,6 +957,9 @@ function calcularTodo() {
     calcularForwardPass();
     calcularBackwardPass();
     calcularHolguraYCritica();
+    actualizarFeriados(true);
+    construirMapaCalendario();
+    actualizarFeriados(false);
     construirMapaCalendario();
     actividades.forEach(a => {
         if (Object.keys(a.porcentajes).length === 0 || (modoAvance === 'planeado' && getSumaPorcentajes(a) === 0)) {
@@ -1673,8 +1769,8 @@ function guardarPDF(tabIndex) {
 }
 
 function imprimirSeccion(tabIndex) {
-    document.body.classList.remove('print-cronograma', 'print-evm', 'print-informe', 'print-bitacora');
-    const cls = ['print-cronograma', 'print-evm', 'print-informe', 'print-bitacora'];
+    document.body.classList.remove('print-cronograma', 'print-evm', 'print-informe');
+    const cls = ['print-cronograma', 'print-evm', 'print-informe'];
     document.body.classList.add(cls[tabIndex] || 'print-cronograma');
     openTab(tabIndex);
     setTimeout(() => {
@@ -1684,87 +1780,233 @@ function imprimirSeccion(tabIndex) {
 }
 
 /* --- Bitácora --- */
+function getNotaBitacoraActiva() {
+    return bitacoraNotas.find(n => n.id === bitacoraNotaActiva) || bitacoraNotas[0];
+}
+
+function getBitacoraEditor() {
+    return document.getElementById('bitacoraEditor');
+}
+
+function guardarNotaActivaDesdeEditor() {
+    const nota = getNotaBitacoraActiva();
+    const editor = getBitacoraEditor();
+    if (nota && editor) nota.html = editor.innerHTML;
+}
+
+function persistirBitacora() {
+    guardarNotaActivaDesdeEditor();
+    try {
+        localStorage.setItem(BITACORA_KEY, JSON.stringify({
+            notas: bitacoraNotas,
+            activa: bitacoraNotaActiva,
+            siguienteId: bitacoraSiguienteId
+        }));
+    } catch (e) { /* ignore */ }
+    guardarProyecto();
+}
+
 function inicializarBitacora() {
     crearToolbarBitacora('bitacoraToolbar');
-    crearToolbarBitacora('bitacoraToolbarModal');
-    ['bitacoraEditor', 'bitacoraEditorModal'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.addEventListener('input', () => {
-            bitacoraHtml = el.innerHTML;
-            sincronizarBitacoraDesde(el);
-            try { localStorage.setItem(BITACORA_KEY, bitacoraHtml); } catch (e) { /* ignore */ }
+    const editor = getBitacoraEditor();
+    if (editor) {
+        editor.addEventListener('input', () => {
+            guardarNotaActivaDesdeEditor();
+            persistirBitacora();
         });
-    });
+    }
+    renderBitacoraTabs();
     sincronizarBitacoraUI();
+}
+
+function renderBitacoraTabs() {
+    const cont = document.getElementById('bitacoraTabsNotas');
+    if (!cont) return;
+    cont.innerHTML = bitacoraNotas.map(n => {
+        const activa = n.id === bitacoraNotaActiva;
+        const cerrar = bitacoraNotas.length > 1
+            ? `<button type="button" class="tab-cerrar" onclick="event.stopPropagation();eliminarNotaBitacora(${n.id})">×</button>`
+            : '';
+        return `<button type="button" class="bitacora-tab-nota${activa ? ' activa' : ''}" onclick="cambiarNotaBitacora(${n.id})" ondblclick="renombrarNotaBitacora(${n.id})">${n.titulo}${cerrar}</button>`;
+    }).join('');
+}
+
+function cambiarNotaBitacora(id) {
+    if (id === bitacoraNotaActiva) return;
+    guardarNotaActivaDesdeEditor();
+    bitacoraNotaActiva = id;
+    renderBitacoraTabs();
+    sincronizarBitacoraUI();
+    persistirBitacora();
+}
+
+function nuevaNotaBitacora() {
+    guardarNotaActivaDesdeEditor();
+    const id = bitacoraSiguienteId++;
+    bitacoraNotas.push({ id, titulo: `${idioma === 'es' ? 'Nota' : 'Note'} ${id}`, html: '' });
+    bitacoraNotaActiva = id;
+    renderBitacoraTabs();
+    sincronizarBitacoraUI();
+    getBitacoraEditor()?.focus();
+    persistirBitacora();
+}
+
+function eliminarNotaBitacora(id) {
+    if (bitacoraNotas.length <= 1) return;
+    if (!confirm(idioma === 'es' ? '¿Eliminar esta nota?' : 'Delete this note?')) return;
+    guardarNotaActivaDesdeEditor();
+    bitacoraNotas = bitacoraNotas.filter(n => n.id !== id);
+    if (bitacoraNotaActiva === id) bitacoraNotaActiva = bitacoraNotas[0].id;
+    renderBitacoraTabs();
+    sincronizarBitacoraUI();
+    persistirBitacora();
+}
+
+function renombrarNotaBitacora(id) {
+    const nota = bitacoraNotas.find(n => n.id === id);
+    if (!nota) return;
+    const nuevo = prompt(idioma === 'es' ? 'Nombre de la nota:' : 'Note name:', nota.titulo);
+    if (nuevo?.trim()) {
+        nota.titulo = nuevo.trim();
+        renderBitacoraTabs();
+        persistirBitacora();
+    }
+}
+
+function bitacoraExec(cmd, val) {
+    const editor = getBitacoraEditor();
+    if (!editor) return;
+    editor.focus();
+    try {
+        document.execCommand('styleWithCSS', false, true);
+        if (cmd === 'hiliteColor') {
+            if (!document.execCommand('hiliteColor', false, val)) document.execCommand('backColor', false, val);
+        } else {
+            document.execCommand(cmd, false, val ?? null);
+        }
+    } catch (e) { /* ignore */ }
+    guardarNotaActivaDesdeEditor();
+    persistirBitacora();
 }
 
 function crearToolbarBitacora(containerId) {
     const tb = document.getElementById(containerId);
     if (!tb) return;
-    const cmds = [
-        { cmd: 'bold', label: 'B', title: 'Bold' }, { cmd: 'italic', label: 'I', title: 'Italic' },
-        { cmd: 'underline', label: 'U', title: 'Underline' }, { cmd: 'strikeThrough', label: 'S', title: 'Strike' },
-        { sep: true },
-        { cmd: 'foreColor', label: '🎨', val: '#c8102e' }, { cmd: 'hiliteColor', label: '🖍', val: '#fef08a' },
-        { sep: true },
-        { cmd: 'fontSize', select: ['1', '3', '5', '7'] },
-        { cmd: 'fontName', select: ['Segoe UI', 'Arial', 'Times New Roman', 'Courier New'] },
-        { sep: true },
-        { cmd: 'insertUnorderedList', label: '•' }, { cmd: 'insertOrderedList', label: '1.' },
-        { cmd: 'justifyLeft', label: '⬅' }, { cmd: 'justifyCenter', label: '⬌' }, { cmd: 'justifyRight', label: '➡' },
-        { sep: true },
-        { cmd: 'undo', label: '↩' }, { cmd: 'redo', label: '↪' }
-    ];
     tb.innerHTML = '';
-    cmds.forEach(c => {
-        if (c.sep) { tb.innerHTML += '<span style="width:1px;height:20px;background:#cbd5e1;margin:0 4px;"></span>'; return; }
-        if (c.select) {
-            const sel = document.createElement('select');
-            c.select.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
-            sel.onchange = () => document.execCommand(c.cmd, false, sel.value);
-            tb.appendChild(sel);
-        } else {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.textContent = c.label;
-            btn.title = c.title || c.cmd;
-            btn.onclick = () => {
-                const target = containerId.includes('Modal') ? document.getElementById('bitacoraEditorModal') : document.getElementById('bitacoraEditor');
-                target?.focus();
-                document.execCommand(c.cmd, false, c.val || null);
-            };
-            tb.appendChild(btn);
-        }
+
+    const addBtn = (label, title, fn) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = label;
+        btn.title = title;
+        btn.addEventListener('mousedown', e => e.preventDefault());
+        btn.addEventListener('click', fn);
+        tb.appendChild(btn);
+        return btn;
+    };
+
+    const addSep = () => {
+        const s = document.createElement('span');
+        s.style.cssText = 'width:1px;height:20px;background:#cbd5e1;margin:0 4px;display:inline-block;';
+        tb.appendChild(s);
+    };
+
+    [
+        ['B', 'Negrita', () => bitacoraExec('bold')],
+        ['I', 'Cursiva', () => bitacoraExec('italic')],
+        ['U', 'Subrayado', () => bitacoraExec('underline')],
+        ['S', 'Tachado', () => bitacoraExec('strikeThrough')]
+    ].forEach(([l, t, fn]) => addBtn(l, t, fn));
+
+    addSep();
+
+    const colorTexto = document.createElement('input');
+    colorTexto.type = 'color';
+    colorTexto.value = '#c8102e';
+    colorTexto.title = idioma === 'es' ? 'Color del texto' : 'Text color';
+    colorTexto.addEventListener('mousedown', e => e.preventDefault());
+    colorTexto.addEventListener('input', e => bitacoraExec('foreColor', e.target.value));
+    tb.appendChild(colorTexto);
+
+    const colorFondo = document.createElement('input');
+    colorFondo.type = 'color';
+    colorFondo.value = '#fef08a';
+    colorFondo.title = idioma === 'es' ? 'Resaltado' : 'Highlight';
+    colorFondo.addEventListener('mousedown', e => e.preventDefault());
+    colorFondo.addEventListener('input', e => bitacoraExec('hiliteColor', e.target.value));
+    tb.appendChild(colorFondo);
+
+    addSep();
+
+    const selSize = document.createElement('select');
+    selSize.title = idioma === 'es' ? 'Tamaño' : 'Size';
+    [{ v: '2', l: 'Pequeño' }, { v: '3', l: 'Normal' }, { v: '5', l: 'Grande' }, { v: '7', l: 'Muy grande' }]
+        .forEach(({ v, l }) => { const o = document.createElement('option'); o.value = v; o.textContent = l; selSize.appendChild(o); });
+    selSize.value = '3';
+    selSize.addEventListener('mousedown', e => e.preventDefault());
+    selSize.addEventListener('change', e => bitacoraExec('fontSize', e.target.value));
+    tb.appendChild(selSize);
+
+    const selFont = document.createElement('select');
+    selFont.title = idioma === 'es' ? 'Tipo de letra' : 'Font';
+    ['Segoe UI', 'Arial', 'Times New Roman', 'Courier New'].forEach(f => {
+        const o = document.createElement('option'); o.value = f; o.textContent = f; selFont.appendChild(o);
     });
+    selFont.addEventListener('mousedown', e => e.preventDefault());
+    selFont.addEventListener('change', e => bitacoraExec('fontName', e.target.value));
+    tb.appendChild(selFont);
+
+    addSep();
+
+    addBtn('•', idioma === 'es' ? 'Lista con viñetas' : 'Bullet list', () => bitacoraExec('insertUnorderedList'));
+    addBtn('1.', idioma === 'es' ? 'Lista numerada' : 'Numbered list', () => bitacoraExec('insertOrderedList'));
+    addBtn('⬅', idioma === 'es' ? 'Alinear izquierda' : 'Align left', () => bitacoraExec('justifyLeft'));
+    addBtn('⬌', idioma === 'es' ? 'Centrar' : 'Center', () => bitacoraExec('justifyCenter'));
+    addBtn('➡', idioma === 'es' ? 'Alinear derecha' : 'Align right', () => bitacoraExec('justifyRight'));
+
+    addSep();
+
+    addBtn('↩', idioma === 'es' ? 'Deshacer' : 'Undo', () => bitacoraExec('undo'));
+    addBtn('↪', idioma === 'es' ? 'Rehacer' : 'Redo', () => bitacoraExec('redo'));
 }
 
 function sincronizarBitacoraUI() {
-    ['bitacoraEditor', 'bitacoraEditorModal'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el && el.innerHTML !== bitacoraHtml) el.innerHTML = bitacoraHtml || '';
-    });
+    const editor = getBitacoraEditor();
+    const nota = getNotaBitacoraActiva();
+    if (editor && nota && editor.innerHTML !== nota.html) editor.innerHTML = nota.html || '';
 }
 
-function sincronizarBitacoraDesde(sourceEl) {
-    bitacoraHtml = sourceEl.innerHTML;
-    ['bitacoraEditor', 'bitacoraEditorModal'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el && el !== sourceEl) el.innerHTML = bitacoraHtml;
-    });
+function toggleBitacora() {
+    const panel = document.getElementById('panelBitacora');
+    if (!panel) return;
+    bitacoraPanelAbierto = !bitacoraPanelAbierto;
+    panel.classList.toggle('activo', bitacoraPanelAbierto);
+    panel.setAttribute('aria-hidden', bitacoraPanelAbierto ? 'false' : 'true');
+    if (bitacoraPanelAbierto) {
+        sincronizarBitacoraUI();
+        getBitacoraEditor()?.focus();
+    } else {
+        guardarNotaActivaDesdeEditor();
+        persistirBitacora();
+    }
 }
 
-function abrirBitacora() {
-    sincronizarBitacoraUI();
-    document.getElementById('modalBitacora')?.classList.add('activo');
+function getContenidoBitacoraExport() {
+    guardarNotaActivaDesdeEditor();
+    if (bitacoraNotas.length === 1) return bitacoraNotas[0].html;
+    return bitacoraNotas.map(n => `<h3>${n.titulo}</h3>${n.html}`).join('<hr>');
 }
 
-function cerrarModalBitacora() {
-    document.getElementById('modalBitacora')?.classList.remove('activo');
+function getTextoBitacoraExport() {
+    guardarNotaActivaDesdeEditor();
+    const editor = getBitacoraEditor();
+    const tmp = document.createElement('div');
+    if (bitacoraNotas.length === 1) return editor?.innerText || bitacoraNotas[0].html.replace(/<[^>]+>/g, '');
+    return bitacoraNotas.map(n => `${n.titulo}\n${(n.html || '').replace(/<[^>]+>/g, ' ')}`).join('\n\n---\n\n');
 }
 
 function exportarBitacoraTXT() {
-    const blob = new Blob([document.getElementById('bitacoraEditor')?.innerText || ''], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([getTextoBitacoraExport()], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'Bitacora_TB1.txt';
@@ -1772,11 +2014,12 @@ function exportarBitacoraTXT() {
 }
 
 function exportarBitacoraPDF() {
+    guardarNotaActivaDesdeEditor();
     guardarPDFProfesional('bitacora');
 }
 
 function exportarBitacoraWord() {
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"></head><body>${bitacoraHtml}</body></html>`;
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"></head><body>${getContenidoBitacoraExport()}</body></html>`;
     const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1987,8 +2230,12 @@ function guardarPDFProfesional(tipo) {
     } else if (tipo === 'bitacora') {
         addHeader(`${t('tabBitacora')} — ${nombre}`);
         doc.setFontSize(10);
-        const texto = document.getElementById('bitacoraEditor')?.innerText || '';
-        const lineas = doc.splitTextToSize(texto || (idioma === 'es' ? '(Bitácora vacía)' : '(Empty logbook)'), pageW - 28);
+        guardarNotaActivaDesdeEditor();
+        const bloques = bitacoraNotas.map(n => {
+            const texto = (n.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            return `${n.titulo}\n${texto || (idioma === 'es' ? '(vacía)' : '(empty)')}`;
+        }).join('\n\n');
+        const lineas = doc.splitTextToSize(bloques || (idioma === 'es' ? '(Bitácora vacía)' : '(Empty logbook)'), pageW - 28);
         doc.text(lineas, 14, 30);
     }
 
