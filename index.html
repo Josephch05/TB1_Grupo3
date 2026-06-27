@@ -26,7 +26,6 @@
         <button class="tab active" onclick="openTab(0)" data-i18n="tabSchedule">Cronograma + Gantt</button>
         <button class="tab" onclick="openTab(1)" data-i18n="tabEVM">Valor Ganado + Análisis</button>
         <button class="tab" onclick="openTab(2)" data-i18n="tabReport">Informe Ejecutivo</button>
-        <button class="tab" onclick="openTab(3)" data-i18n="tabLog">Bitácora del Proyecto</button>
     </div>
 
     <!-- TAB 0 -->
@@ -99,9 +98,9 @@
                         <span data-i18n="calendarActive">Activar calendario laboral</span>
                     </label>
                 </div>
-                <div>
-                    <label data-i18n="calendarYear">Año de feriados nacionales</label>
-                    <select id="anioFeriados"></select>
+                <div class="calendario-rango-info">
+                    <label data-i18n="calendarRange">Período del calendario</label>
+                    <p id="calendarioRangoTexto" class="hint calendario-rango-texto" data-i18n="calendarRangeEmpty">Defina fecha de inicio y actividades para calcular feriados automáticamente.</p>
                 </div>
                 <div>
                     <label data-i18n="calendarDept">Departamentos (feriados regionales)</label>
@@ -331,20 +330,6 @@
         </section>
     </div>
 
-    <!-- TAB 3 - Bitácora -->
-    <div id="tab3" class="tab-content" style="display:none;">
-        <section class="card">
-            <h2 data-i18n="tabLog">Bitácora del Proyecto</h2>
-            <p class="subtitle" data-i18n="logHint">Editor enriquecido con guardado automático.</p>
-            <div id="bitacoraToolbar" class="bitacora-toolbar no-print"></div>
-            <div id="bitacoraEditor" class="bitacora-editor" contenteditable="true"></div>
-            <div class="acciones-exportar no-print" style="margin-top:14px;">
-                <button onclick="exportarBitacoraTXT()" data-i18n="exportLogTxt">Exportar TXT</button>
-                <button onclick="exportarBitacoraPDF()" data-i18n="exportLogPdf">Exportar PDF</button>
-                <button onclick="exportarBitacoraWord()" data-i18n="exportLogWord">Exportar Word</button>
-            </div>
-        </section>
-    </div>
 </div>
 
 <!-- Modal Editar Actividad -->
@@ -377,24 +362,26 @@
     </div>
 </div>
 
-<!-- Modal Bitácora (mismo contenido que tab 3) -->
-<div id="modalBitacora" class="modal-overlay modal-bitacora no-print" style="display:none;">
-    <div class="modal-card modal-card-grande">
-        <div class="modal-bitacora-header">
-            <h3 data-i18n="tabLog">Bitácora del Proyecto</h3>
-            <button class="btn-cerrar" onclick="cerrarBitacoraModal()">✕</button>
+<!-- Panel flotante Bitácora (esquina inferior derecha) -->
+<div id="panelBitacora" class="panel-bitacora no-print" aria-hidden="true">
+    <div class="panel-bitacora-header">
+        <h3 data-i18n="tabLog">Bitácora del Proyecto</h3>
+        <div class="panel-bitacora-acciones-header">
+            <button type="button" class="btn-mini" onclick="nuevaNotaBitacora()" title="Nueva nota">+</button>
+            <button type="button" class="btn-cerrar" onclick="toggleBitacora()" title="Cerrar">✕</button>
         </div>
-        <div id="bitacoraToolbarModal" class="bitacora-toolbar"></div>
-        <div id="bitacoraEditorModal" class="bitacora-editor" contenteditable="true"></div>
-        <div class="acciones-exportar" style="margin-top:14px;">
-            <button onclick="exportarBitacoraTXT()" data-i18n="exportLogTxt">Exportar TXT</button>
-            <button onclick="exportarBitacoraPDF()" data-i18n="exportLogPdf">Exportar PDF</button>
-            <button onclick="exportarBitacoraWord()" data-i18n="exportLogWord">Exportar Word</button>
-        </div>
+    </div>
+    <div id="bitacoraTabsNotas" class="bitacora-tabs-notas"></div>
+    <div id="bitacoraToolbar" class="bitacora-toolbar"></div>
+    <div id="bitacoraEditor" class="bitacora-editor" contenteditable="true" spellcheck="true"></div>
+    <div class="panel-bitacora-footer">
+        <button type="button" class="btn-mini-sec" onclick="exportarBitacoraTXT()" data-i18n="exportLogTxt">TXT</button>
+        <button type="button" class="btn-mini-sec" onclick="exportarBitacoraPDF()" data-i18n="exportLogPdf">PDF</button>
+        <button type="button" class="btn-mini-sec" onclick="exportarBitacoraWord()" data-i18n="exportLogWord">Word</button>
     </div>
 </div>
 
-<button id="fabBitacora" class="fab-bitacora no-print" onclick="abrirBitacora()" title="Bitácora">📝</button>
+<button id="fabBitacora" class="fab-bitacora no-print" onclick="toggleBitacora()" title="Bitácora">📝</button>
 
 <script src="data-peru.js"></script>
 <script src="script.js"></script>
