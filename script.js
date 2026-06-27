@@ -86,10 +86,15 @@ const traducciones = {
         alertNoPDF: 'No se cargó la librería PDF.',
         alertNoExcel: 'No se cargó la librería Excel.',
         statusCritical: 'CRÍTICA', statusNormal: 'Normal',
-        start: 'Inicio', end: 'Final', totalDuration: 'Duración total',
+        start: 'Inicio', end: 'Final',
+        totalDuration: 'Duración total (días laborables)',
         ganttEmpty: 'Agrega actividades', sumPeriod: 'Suma del', accumulated: 'Acumulada',
         noCostIfZeroAdvance: 'No puede ingresar costo si avance es 0%',
-        slackAsPercent: 'Mostrar holgura como % de duración del proyecto',
+        slackAsPercent: 'Mostrar holgura como % de la duración total (columna cronograma)',
+        projectionTitle: 'Proyección de culminación',
+        projectionDays: 'Días calendario hasta el fin',
+        projectionEndDate: 'Fecha estimada de culminación',
+        projectionNonWork: 'Días no laborables en el período',
         saveProject: 'Guardar proyecto', loadProject: 'Cargar proyecto',
         exportJSON: 'Exportar JSON', loadExample: 'Cargar ejemplo',
         calendarTitle: 'Calendario Laboral',
@@ -106,7 +111,7 @@ const traducciones = {
         validationTitle: 'Validaciones del proyecto', validationOk: 'Proyecto válido. Sin errores.',
         legendCritical: 'Ruta crítica', legendNonWork: 'No laborable',
         editActivity: 'Editar Actividad', cancel: 'Cancelar', save: 'Guardar', close: 'Cerrar',
-        exportExcelFull: 'Excel completo', savePDFPro: 'PDF profesional',
+        exportExcelFull: 'Exportar Excel', savePDFPro: 'Guardar PDF',
         tcpiBacHint: 'Rendimiento requerido para cumplir BAC',
         tcpiEacHint: 'Rendimiento requerido según EAC proyectado',
         scheduleAdvancePct: 'Avance cronograma %', costOverrunPct: 'Sobrecosto %',
@@ -179,10 +184,15 @@ const traducciones = {
         alertNoPDF: 'PDF library not loaded.',
         alertNoExcel: 'Excel library not loaded.',
         statusCritical: 'CRITICAL', statusNormal: 'Normal',
-        start: 'Start', end: 'End', totalDuration: 'Total duration',
+        start: 'Start', end: 'End',
+        totalDuration: 'Total duration (work days)',
         ganttEmpty: 'Add activities', sumPeriod: 'Sum of', accumulated: 'Accumulated',
         noCostIfZeroAdvance: 'Cannot enter cost if advance is 0%',
-        slackAsPercent: 'Show slack as % of project duration',
+        slackAsPercent: 'Show slack as % of total duration (schedule column)',
+        projectionTitle: 'Completion projection',
+        projectionDays: 'Calendar days until completion',
+        projectionEndDate: 'Estimated completion date',
+        projectionNonWork: 'Non-work days in period',
         saveProject: 'Save project', loadProject: 'Load project',
         exportJSON: 'Export JSON', loadExample: 'Load example',
         calendarTitle: 'Work Calendar',
@@ -199,7 +209,7 @@ const traducciones = {
         validationTitle: 'Project validations', validationOk: 'Project valid. No errors.',
         legendCritical: 'Critical path', legendNonWork: 'Non-work',
         editActivity: 'Edit Activity', cancel: 'Cancel', save: 'Save', close: 'Close',
-        exportExcelFull: 'Full Excel', savePDFPro: 'Professional PDF',
+        exportExcelFull: 'Export Excel', savePDFPro: 'Save PDF',
         tcpiBacHint: 'Performance required to meet BAC',
         tcpiEacHint: 'Performance required per projected EAC',
         scheduleAdvancePct: 'Schedule advance %', costOverrunPct: 'Cost overrun %',
@@ -318,23 +328,35 @@ function construirMapaCalendario() {
     while (!esDiaLaborable(f)) f.setDate(f.getDate() + 1);
     for (let p = 0; p < maxP; p++) {
         mapaCalendario[p] = new Date(f);
-        if (p === 0) diasCalendarioGantt.push(new Date(f));
         f = siguienteDiaLaborable(f);
-        if (p < maxP - 1) {
-            let gap = new Date(mapaCalendario[p]);
-            gap.setDate(gap.getDate() + 1);
-            while (gap < f) {
-                diasCalendarioGantt.push(new Date(gap));
-                gap.setDate(gap.getDate() + 1);
-            }
-        }
     }
-    if (mapaCalendario.length) {
-        const ultimo = mapaCalendario[mapaCalendario.length - 1];
-        if (!diasCalendarioGantt.some(d => d.toDateString() === ultimo.toDateString())) {
-            diasCalendarioGantt.push(new Date(ultimo));
-        }
+    const primerDia = new Date(projectStartDate);
+    const ultimoDia = mapaCalendario[maxP - 1];
+    let d = new Date(primerDia);
+    while (d <= ultimoDia) {
+        diasCalendarioGantt.push(new Date(d));
+        d.setDate(d.getDate() + 1);
     }
+}
+
+function getProyeccionProyecto() {
+    const totalLab = Math.max(...actividades.map(a => a.EF), 0);
+    if (!projectStartDate || !totalLab) return null;
+    const inicio = new Date(projectStartDate);
+    if (esCalendarioAplicable() && mapaCalendario.length) {
+        const fin = mapaCalendario[mapaCalendario.length - 1];
+        let diasCal = 0, diasNoLab = 0;
+        const d = new Date(inicio);
+        while (d <= fin) {
+            diasCal++;
+            if (!esDiaLaborable(d)) diasNoLab++;
+            d.setDate(d.getDate() + 1);
+        }
+        return { diasLaborables: totalLab, diasCalendario: diasCal, diasNoLaborables: diasNoLab, fechaInicio: inicio, fechaFin: fin };
+    }
+    const fin = new Date(inicio);
+    fin.setDate(fin.getDate() + totalLab - 1);
+    return { diasLaborables: totalLab, diasCalendario: totalLab, diasNoLaborables: 0, fechaInicio: inicio, fechaFin: fin };
 }
 
 function periodoAFechaCalendario(periodo) {
@@ -707,7 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         generarAnalisisGerencial();
     });
     const holgEl = document.getElementById('holguraPorcentaje');
-    if (holgEl) holgEl.addEventListener('change', e => { holguraPorcentaje = e.target.checked; renderTabla(); });
+    if (holgEl) holgEl.addEventListener('change', e => { holguraPorcentaje = e.target.checked; renderTabla(); renderGantt(); });
     const calEl = document.getElementById('calendarioActivo');
     if (calEl) calEl.addEventListener('change', e => { calendarioActivo = e.target.checked; togglePanelCalendario(); calcularTodo(); });
     document.getElementById('departamentosFeriados')?.addEventListener('change', () => { actualizarFeriados(true); calcularTodo(); });
@@ -848,6 +870,7 @@ function agregarActividad() {
         presupuesto,
         predecesoras,
         porcentajes: {},
+        porcentajesHolgura: {},
         ES: 0,
         EF: 0,
         LS: 0,
@@ -904,6 +927,14 @@ function actualizarPorcentaje(actId, periodo, val) {
     if (!act) return;
     act.porcentajes[periodo] = parseFloat(val) || 0;
     calcularTodo();
+}
+
+function actualizarPorcentajeHolgura(actId, periodo, val) {
+    const act = actividades.find(a => a.id === actId);
+    if (!act) return;
+    if (!act.porcentajesHolgura) act.porcentajesHolgura = {};
+    act.porcentajesHolgura[periodo] = parseFloat(val) || 0;
+    guardarProyecto();
 }
 
 function getSumaPorcentajes(act) {
@@ -1084,6 +1115,7 @@ function renderGantt() {
     }
 
     const maxP = Math.max(...actividades.map(a => a.LF), 0);
+    const totalDur = Math.max(...actividades.map(a => a.EF), 0);
     const startDate = projectStartDate ? new Date(projectStartDate) : new Date();
     const usarCal = esCalendarioAplicable() && diasCalendarioGantt.length > 0;
     const numCols = usarCal ? diasCalendarioGantt.length : maxP;
@@ -1127,8 +1159,8 @@ function renderGantt() {
             const noLab = usarCal && fCal && !esDiaLaborable(fCal);
             const esCorte = i === idxCorteGantt;
             let clsExtra = esCorte ? ' gantt-celda-corte' : '';
-            if (noLab && periodo < 0) {
-                html += `<td class="gantt-celda-nolab${clsExtra}"></td>`;
+            if (usarCal && noLab) {
+                html += `<td class="gantt-celda-nolab${clsExtra}" title="${formatearFecha(fCal)}"></td>`;
             } else if (periodo >= 0 && esCeldaEditable(periodo, act)) {
                 const critCls = act.esCritica ? ' gantt-celda-trabajo-critica' : '';
                 const pct = act.porcentajes[periodo] ?? '';
@@ -1139,9 +1171,12 @@ function renderGantt() {
                     ${modoAvance === 'planeado' && val > 0 ? `<small class="valor-celda">${val.toFixed(0)}</small>` : ''}
                 </td>`;
             } else if (periodo >= 0 && esCeldaHolgura(periodo, act)) {
-                html += `<td class="gantt-celda-holgura${clsExtra}"></td>`;
-            } else if (noLab) {
-                html += `<td class="gantt-celda-nolab${clsExtra}"></td>`;
+                if (!act.porcentajesHolgura) act.porcentajesHolgura = {};
+                const hp = act.porcentajesHolgura[periodo] ?? '';
+                html += `<td class="gantt-celda-holgura${clsExtra}">
+                    <input type="number" min="0" max="100" step="0.1" value="${hp}" class="input-pct"
+                        onchange="actualizarPorcentajeHolgura(${act.id}, ${periodo}, this.value)">
+                </td>`;
             } else {
                 html += `<td class="gantt-celda-vacia${clsExtra}"></td>`;
             }
@@ -1176,7 +1211,18 @@ function mostrarRutaCritica() {
     el.classList.add('resaltada');
     let r = t('start');
     crit.forEach(a => { r += ` → ${a.id}`; });
-    el.innerHTML = `<strong>${t('criticalPath').toUpperCase()}</strong><br><br>${r} → ${t('end')}<br><br><strong>${t('totalDuration')}: ${total} ${getUnidadLabel()}</strong>`;
+    const proy = getProyeccionProyecto();
+    let proyHtml = '';
+    if (proy) {
+        const extra = proy.diasNoLaborables > 0
+            ? `<br><em>${t('projectionNonWork')}: ${proy.diasNoLaborables}</em>`
+            : '';
+        proyHtml = `<br><br><strong>${t('projectionTitle')}</strong><br>
+            ${t('projectionDays')}: <strong>${proy.diasCalendario}</strong> ${idioma === 'es' ? 'días calendario' : 'calendar days'}${extra}<br>
+            ${t('projectionEndDate')}: <strong>${formatearFecha(proy.fechaFin)}</strong>`;
+    }
+    el.innerHTML = `<strong>${t('criticalPath').toUpperCase()}</strong><br><br>${r} → ${t('end')}<br><br>
+        <strong>${t('totalDuration')}: ${total} ${getUnidadLabel()}</strong>${proyHtml}`;
 }
 
 function generarPeriodosEVM() {
@@ -1510,30 +1556,18 @@ function generarAnalisisGerencial() {
     document.getElementById('cv').textContent = formatearMoneda(cv);
     const elTcpiBac = document.getElementById('tcpiBac');
     const elTcpiEac = document.getElementById('tcpiEac');
-    const elAvCron = document.getElementById('avanceCronPct');
-    const elSobre = document.getElementById('sobrecostoPct');
-    const elInterpExtra = document.getElementById('interpretacionIndicadoresExtra');
     if (elTcpiBac) elTcpiBac.textContent = tcpiBac.toFixed(3);
     if (elTcpiEac) elTcpiEac.textContent = tcpiEac.toFixed(3);
-    if (elAvCron) elAvCron.textContent = `${avanceCronPct.toFixed(1)}%`;
-    if (elSobre) elSobre.textContent = `${sobrecostoPct.toFixed(1)}%`;
-    if (elInterpExtra) {
-        elInterpExtra.innerHTML = idioma === 'es'
-            ? `<strong>Indicadores extendidos al ${periodoLabel}:</strong><br>
-                TCPI (BAC) = ${tcpiBac.toFixed(3)} — ${tcpiBac <= 1 ? 'rendimiento futuro alcanzable para cumplir BAC.' : 'se requiere mejorar eficiencia de costo para no exceder BAC.'}<br>
-                TCPI (EAC) = ${tcpiEac.toFixed(3)} — según EAC proyectado (${formatearMoneda(eacSel)}).<br>
-                Avance cronograma = (SPI−1)×100 = <strong>${avanceCronPct.toFixed(1)}%</strong> — ${avanceCronPct >= 0 ? 'adelanto respecto al plan.' : 'retraso respecto al plan.'}<br>
-                Sobrecosto = ((AC−EV)/EV)×100 = <strong>${sobrecostoPct.toFixed(1)}%</strong> — ${sobrecostoPct <= 0 ? 'bajo presupuesto en valor ganado.' : 'gasto superior al valor ganado.'}`
-            : `<strong>Extended indicators at ${periodoLabel}:</strong><br>
-                TCPI (BAC) = ${tcpiBac.toFixed(3)} | TCPI (EAC) = ${tcpiEac.toFixed(3)} (EAC ${formatearMoneda(eacSel)})<br>
-                Schedule advance = ${avanceCronPct.toFixed(1)}% | Cost overrun = ${sobrecostoPct.toFixed(1)}%`;
-    }
 
     if (idioma === 'es') {
         elCron.innerHTML = `
             <p><strong>Periodo analizado:</strong> ${periodoLabel}</p>
             <p><strong>SV = EV − PV =</strong> ${formatearMoneda(ev)} − ${formatearMoneda(pv)} = <span class="${sv >= 0 ? 'txt-ok' : 'txt-bad'}">${formatearMoneda(sv)}</span></p>
             <p><strong>SPI = EV / PV =</strong> ${formatearMoneda(ev)} / ${formatearMoneda(pv)} = <strong>${spi.toFixed(3)}</strong></p>
+            <p><strong>Avance cronograma = (SPI − 1) × 100 =</strong> <span class="${avanceCronPct >= 0 ? 'txt-ok' : 'txt-bad'}">${avanceCronPct.toFixed(1)}%</span>
+                — ${avanceCronPct >= 0
+                    ? 'el proyecto va adelantado respecto al plan de trabajo planificado.'
+                    : 'el proyecto va retrasado: ejecuta menos valor ganado del programado al ritmo actual.'}</p>
             <p class="interpretacion-texto">
                 ${sv >= 0
                     ? `La obra <strong>no presenta retraso</strong> al ${periodoLabel.toLowerCase()}. El valor ganado supera o iguala lo planificado, con un excedente de trabajo equivalente a ${formatearMoneda(Math.abs(sv))}.`
@@ -1541,14 +1575,14 @@ function generarAnalisisGerencial() {
                 <br><br>
                 El SPI de <strong>${spi.toFixed(3)}</strong> indica que el proyecto avanza al <strong>${(spi * 100).toFixed(1)}%</strong> de la velocidad planificada.
                 ${spi < 1
-                    ? `Es decir, por cada ${moneda} 1.00 planificado, solo se está generando ${moneda} ${spi.toFixed(3)} de avance real. Si se mantiene este ritmo, <strong>no se terminará a tiempo</strong> el proyecto.`
-                    : `El ritmo de avance es igual o superior al planificado.`}
+                    ? ` Por cada ${moneda} 1.00 planificado solo se genera ${moneda} ${spi.toFixed(3)} de avance real; si continúa así, <strong>no culminará a tiempo</strong>.`
+                    : ` El ritmo de avance es igual o superior al planificado.`}
             </p>
-            <p><strong>Tiempo estimado de culminación = Duración original / SPI =</strong> ${duracionOriginal} / ${spi.toFixed(3)} = <strong>${tiempoEstimado.toFixed(1)} ${unidad}</strong></p>
+            <p><strong>Tiempo estimado de culminación = Duración / SPI =</strong> ${duracionOriginal} / ${spi.toFixed(3)} = <strong>${tiempoEstimado.toFixed(1)} ${unidad}</strong></p>
             <p><strong>Retraso estimado ≈</strong> <span class="${retraso > 0 ? 'txt-bad' : 'txt-ok'}">${retraso.toFixed(1)} ${unidad}</span>
                 ${retraso > 0
-                    ? `(en lugar de ${duracionOriginal} ${unidad} planificados, se estima ${tiempoEstimado.toFixed(1)} ${unidad})`
-                    : `(no se proyecta retraso adicional respecto al plan)`}
+                    ? `(plan original: ${duracionOriginal} ${unidad}; proyección: ${tiempoEstimado.toFixed(1)} ${unidad})`
+                    : `(sin retraso adicional proyectado respecto al plan)`}
             </p>
         `;
 
@@ -1556,27 +1590,30 @@ function generarAnalisisGerencial() {
             <p><strong>Periodo analizado:</strong> ${periodoLabel}</p>
             <p><strong>CV = EV − AC =</strong> ${formatearMoneda(ev)} − ${formatearMoneda(ac)} = <span class="${cv >= 0 ? 'txt-ok' : 'txt-bad'}">${formatearMoneda(cv)}</span></p>
             <p><strong>CPI = EV / AC =</strong> ${formatearMoneda(ev)} / ${formatearMoneda(ac)} = <strong>${cpi.toFixed(3)}</strong></p>
+            <p><strong>Sobrecosto = ((AC − EV) / EV) × 100 =</strong> <span class="${sobrecostoPct <= 0 ? 'txt-ok' : 'txt-bad'}">${sobrecostoPct.toFixed(1)}%</span>
+                — ${sobrecostoPct <= 0
+                    ? 'el gasto está acorde o por debajo del valor ganado acumulado.'
+                    : `se ha gastado un ${sobrecostoPct.toFixed(1)}% más de lo que corresponde por el trabajo ejecutado (EV).`}</p>
             <p class="interpretacion-texto">
                 ${cv >= 0
-                    ? `El proyecto está <strong>bajo presupuesto</strong>. Se ha generado ${formatearMoneda(Math.abs(cv))} más de valor del trabajo ejecutado (EV) de lo que se ha gastado (AC).`
-                    : `Se ha gastado <strong>${formatearMoneda(Math.abs(cv))} más</strong> de lo que corresponde por el valor del trabajo realmente ejecutado (EV). La obra acumula un <strong>sobrecosto</strong> de ${formatearMoneda(Math.abs(cv))} al ${periodoLabel.toLowerCase()}.`}
+                    ? `El proyecto está <strong>bajo presupuesto</strong>. Se ha generado ${formatearMoneda(Math.abs(cv))} más de valor (EV) de lo gastado (AC).`
+                    : `Se ha gastado <strong>${formatearMoneda(Math.abs(cv))} más</strong> de lo que corresponde por el trabajo ejecutado. Hay sobrecosto acumulado al ${periodoLabel.toLowerCase()}.`}
                 <br><br>
-                Por cada ${moneda} 1.00 invertido, solo se está generando aproximadamente <strong>${moneda} ${cpi.toFixed(3)}</strong> de avance real (eficiencia de costo: ${(cpi * 100).toFixed(1)}%).
+                Por cada ${moneda} 1.00 invertido se genera ${moneda} <strong>${cpi.toFixed(3)}</strong> de avance real (eficiencia ${(cpi * 100).toFixed(1)}%).
                 ${cpi < 1
-                    ? `Visto de otra manera, para obtener ${formatearMoneda(ev)} de valor ganado, se han gastado ${formatearMoneda(ac)} (≈ ${moneda} ${costoPorUnidadEV.toFixed(2)} por cada ${moneda} 1.00 de EV).`
+                    ? ` Para alcanzar ${formatearMoneda(ev)} de EV se gastaron ${formatearMoneda(ac)} (≈ ${moneda} ${costoPorUnidadEV.toFixed(2)} por cada ${moneda} 1.00 de EV).`
                     : ''}
             </p>
             <p><strong>TCPI (BAC) = (BAC − EV) / (BAC − AC) =</strong> (${formatearMoneda(bac)} − ${formatearMoneda(ev)}) / (${formatearMoneda(bac)} − ${formatearMoneda(ac)}) = <strong>${tcpiBac.toFixed(3)}</strong></p>
             <p class="interpretacion-texto">
                 ${tcpiBac <= 1
-                    ? `Se necesita un rendimiento de ${tcpiBac.toFixed(3)} para terminar dentro del presupuesto. El desempeño futuro requerido es alcanzable.`
-                    : `Se necesita un rendimiento de <strong>${tcpiBac.toFixed(3)}</strong>: por cada ${moneda} 1.00 que se invierta de aquí en adelante, se debe generar ${moneda} ${tcpiBac.toFixed(2)} de valor para cumplir con el BAC.`}
+                    ? `Rendimiento futuro requerido ${tcpiBac.toFixed(3)}: alcanzable para terminar dentro del BAC.`
+                    : `Se requiere rendimiento ${tcpiBac.toFixed(3)}: por cada ${moneda} 1.00 invertido de aquí en adelante debe generarse ${moneda} ${tcpiBac.toFixed(2)} de valor para cumplir el BAC.`}
             </p>
             <p><strong>TCPI (EAC) = (BAC − EV) / (EAC − AC) =</strong> <strong>${tcpiEac.toFixed(3)}</strong> (EAC = ${formatearMoneda(eacSel)})</p>
-            <p><strong>Avance cronograma % = (SPI−1)×100 =</strong> ${avanceCronPct.toFixed(1)}% | <strong>Sobrecosto % =</strong> ${sobrecostoPct.toFixed(1)}%</p>
             <p><strong>Estado general:</strong>
                 ${(spi < 1 && cpi < 1)
-                    ? '🔴 Proyecto en estado CRÍTICO: desviaciones negativas en tiempo y costo.'
+                    ? '🔴 Proyecto CRÍTICO: desviaciones negativas en tiempo y costo.'
                     : (spi < 1 || cpi < 1)
                         ? '🟡 Proyecto con desviación en tiempo o costo.'
                         : '🟢 Proyecto dentro de parámetros planificados.'}
@@ -1586,24 +1623,24 @@ function generarAnalisisGerencial() {
         elCron.innerHTML = `
             <p><strong>Analyzed period:</strong> ${periodoLabel}</p>
             <p><strong>SV = EV − PV =</strong> ${formatearMoneda(sv)} | <strong>SPI =</strong> ${spi.toFixed(3)}</p>
+            <p><strong>Schedule advance = (SPI−1)×100 =</strong> <span class="${avanceCronPct >= 0 ? 'txt-ok' : 'txt-bad'}">${avanceCronPct.toFixed(1)}%</span>
+                — ${avanceCronPct >= 0 ? 'ahead of plan.' : 'behind plan.'}</p>
             <p class="interpretacion-texto">
                 ${spi >= 1
                     ? 'Project is on or ahead of schedule.'
-                    : `Project is behind schedule. Running at ${(spi * 100).toFixed(1)}% of planned speed. Delay equivalent to ${formatearMoneda(Math.abs(sv))} of unexecuted work.`}
+                    : `Behind schedule at ${(spi * 100).toFixed(1)}% of planned speed. Delay: ${formatearMoneda(Math.abs(sv))}.`}
             </p>
-            <p><strong>Estimated completion time:</strong> ${tiempoEstimado.toFixed(1)} ${unidad} | <strong>Estimated delay:</strong> ${retraso.toFixed(1)} ${unidad}</p>
+            <p><strong>Estimated completion:</strong> ${tiempoEstimado.toFixed(1)} ${unidad} | <strong>Delay:</strong> ${retraso.toFixed(1)} ${unidad}</p>
         `;
 
         elCosto.innerHTML = `
             <p><strong>Analyzed period:</strong> ${periodoLabel}</p>
             <p><strong>CV = EV − AC =</strong> ${formatearMoneda(cv)} | <strong>CPI =</strong> ${cpi.toFixed(3)}</p>
+            <p><strong>Cost overrun = ((AC−EV)/EV)×100 =</strong> <span class="${sobrecostoPct <= 0 ? 'txt-ok' : 'txt-bad'}">${sobrecostoPct.toFixed(1)}%</span></p>
             <p class="interpretacion-texto">
-                ${cpi >= 1
-                    ? 'Project is under budget.'
-                    : `Over budget by ${formatearMoneda(Math.abs(cv))}. For every ${moneda} 1.00 spent, only ${moneda} ${cpi.toFixed(3)} of real progress is generated.`}
+                ${cpi >= 1 ? 'Under budget.' : `Over budget by ${formatearMoneda(Math.abs(cv))}.`}
             </p>
             <p><strong>TCPI (BAC) =</strong> ${tcpiBac.toFixed(3)} | <strong>TCPI (EAC) =</strong> ${tcpiEac.toFixed(3)}</p>
-            <p>Schedule advance %: ${avanceCronPct.toFixed(1)}% | Cost overrun %: ${sobrecostoPct.toFixed(1)}%</p>
         `;
     }
 
@@ -1873,6 +1910,22 @@ function renombrarNotaBitacora(id) {
     }
 }
 
+function bitacoraAplicarFuente(fuente) {
+    const editor = getBitacoraEditor();
+    if (!editor) return;
+    editor.focus();
+    const sel = window.getSelection();
+    if (sel?.rangeCount && !sel.isCollapsed) {
+        const html = `<span style="font-family:${fuente}, sans-serif;">${sel.toString()}</span>`;
+        document.execCommand('insertHTML', false, html);
+    } else {
+        document.execCommand('styleWithCSS', false, true);
+        document.execCommand('fontName', false, fuente);
+    }
+    guardarNotaActivaDesdeEditor();
+    persistirBitacora();
+}
+
 function bitacoraExec(cmd, val) {
     const editor = getBitacoraEditor();
     if (!editor) return;
@@ -1953,13 +2006,16 @@ function crearToolbarBitacora(containerId) {
         const o = document.createElement('option'); o.value = f; o.textContent = f; selFont.appendChild(o);
     });
     selFont.addEventListener('mousedown', e => e.preventDefault());
-    selFont.addEventListener('change', e => bitacoraExec('fontName', e.target.value));
+    selFont.addEventListener('change', e => bitacoraAplicarFuente(e.target.value));
     tb.appendChild(selFont);
 
     addSep();
 
     addBtn('•', idioma === 'es' ? 'Lista con viñetas' : 'Bullet list', () => bitacoraExec('insertUnorderedList'));
-    addBtn('1.', idioma === 'es' ? 'Lista numerada' : 'Numbered list', () => bitacoraExec('insertOrderedList'));
+    addBtn('1.', idioma === 'es' ? 'Lista numerada' : 'Numbered list', () => {
+        bitacoraExec('insertOrderedList');
+        getBitacoraEditor()?.querySelectorAll('ol').forEach(ol => { ol.style.paddingLeft = '1.5em'; ol.style.marginLeft = '0'; });
+    });
     addBtn('⬅', idioma === 'es' ? 'Alinear izquierda' : 'Align left', () => bitacoraExec('justifyLeft'));
     addBtn('⬌', idioma === 'es' ? 'Centrar' : 'Center', () => bitacoraExec('justifyCenter'));
     addBtn('➡', idioma === 'es' ? 'Alinear derecha' : 'Align right', () => bitacoraExec('justifyRight'));
@@ -2044,6 +2100,9 @@ function generarInformeEjecutivo() {
     const critCount = actividades.filter(a => a.esCritica).length;
     const fecha = new Date().toLocaleDateString(idioma === 'es' ? 'es-PE' : 'en-US');
     const periodoLabel = getEtiquetaTiempo(diaCorte);
+    const avanceCronPct = (spi - 1) * 100;
+    const sobrecostoPct = ev > 0 ? ((ac - ev) / ev) * 100 : 0;
+    const proy = getProyeccionProyecto();
 
     el.innerHTML = `
         <div class="informe-portada">
@@ -2071,15 +2130,16 @@ function generarInformeEjecutivo() {
         <div class="informe-seccion">
             <h3>${idioma === 'es' ? 'Cronograma y Ruta Crítica' : 'Schedule and Critical Path'}</h3>
             <p>${idioma === 'es'
-                ? `Desviación de cronograma (SV): ${formatearMoneda(sv)}. Actividades críticas: ${critCount}. ${spi >= 1 ? 'El avance físico-financiero está acorde o adelantado al plan.' : 'Se detecta retraso; se recomienda revisar recursos en ruta crítica.'}`
-                : `Schedule variance (SV): ${formatearMoneda(sv)}. Critical activities: ${critCount}.`}
+                ? `Desviación de cronograma (SV): ${formatearMoneda(sv)}. Avance cronograma: ${avanceCronPct.toFixed(1)}%. Actividades críticas: ${critCount}. ${spi >= 1 ? 'Avance acorde o adelantado al plan.' : 'Retraso detectado; revisar ruta crítica.'}`
+                : `SV: ${formatearMoneda(sv)}. Schedule advance: ${avanceCronPct.toFixed(1)}%. Critical: ${critCount}.`}
             </p>
+            ${proy ? `<p>${t('totalDuration')}: ${proy.diasLaborables} ${getUnidadLabel()}. ${t('projectionDays')}: ${proy.diasCalendario}. ${t('projectionEndDate')}: ${formatearFecha(proy.fechaFin)}.${proy.diasNoLaborables ? ` ${t('projectionNonWork')}: ${proy.diasNoLaborables}.` : ''}</p>` : ''}
         </div>
         <div class="informe-seccion">
             <h3>${idioma === 'es' ? 'Costos y Proyección' : 'Costs and Projection'}</h3>
             <p>${idioma === 'es'
-                ? `Desviación de costo (CV): ${formatearMoneda(cv)}. EAC proyectado: ${formatearMoneda(eacSel)}. VAC: ${formatearMoneda(vacSel)}.`
-                : `Cost variance (CV): ${formatearMoneda(cv)}. Projected EAC: ${formatearMoneda(eacSel)}. VAC: ${formatearMoneda(vacSel)}.`}
+                ? `Desviación de costo (CV): ${formatearMoneda(cv)}. Sobrecosto: ${sobrecostoPct.toFixed(1)}%. EAC: ${formatearMoneda(eacSel)}. VAC: ${formatearMoneda(vacSel)}.`
+                : `CV: ${formatearMoneda(cv)}. Overrun: ${sobrecostoPct.toFixed(1)}%. EAC: ${formatearMoneda(eacSel)}. VAC: ${formatearMoneda(vacSel)}.`}
             </p>
         </div>
         <div class="informe-conclusion">
@@ -2220,13 +2280,56 @@ function guardarPDFProfesional(tipo) {
             });
         }
     } else if (tipo === 'informe') {
+        generarInformeEjecutivo();
+        const el = document.getElementById('contenidoInformeEjecutivo');
+        if (!el?.innerHTML.trim()) {
+            alert(idioma === 'es' ? 'No hay contenido de informe para exportar.' : 'No report content to export.');
+            return;
+        }
+        if (typeof html2pdf !== 'undefined') {
+            const tab = document.getElementById('tab2');
+            const prevDisplay = tab?.style.display;
+            if (tab) tab.style.display = 'block';
+            el.classList.add('informe-export-pdf');
+            const restoreTab = () => {
+                el.classList.remove('informe-export-pdf');
+                if (tab) tab.style.display = prevDisplay || 'none';
+            };
+            try {
+                const job = html2pdf().set({
+                    margin: 10,
+                    filename: 'TB1_Informe_Pro.pdf',
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: { scale: 2, useCORS: true, scrollY: -window.scrollY, backgroundColor: '#ffffff' },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                }).from(el).save();
+                if (job?.then) job.then(restoreTab).catch(restoreTab);
+                else setTimeout(restoreTab, 2000);
+            } catch (err) {
+                restoreTab();
+                alert(t('alertNoPDF'));
+            }
+            return;
+        }
         addHeader(`${t('executiveReport')} — ${nombre}`);
-        doc.setFontSize(10);
         const { pv, ev, ac, bac } = getDatosCorte();
         const spi = pv > 0 ? ev / pv : 0;
         const cpi = ac > 0 ? ev / ac : 0;
-        doc.text(`SPI: ${spi.toFixed(3)} | CPI: ${cpi.toFixed(3)} | ${t('cutoffLabel')}: ${getEtiquetaTiempo(diaCorte)}`, 14, 30);
-        doc.text(`${idioma === 'es' ? 'Ver gráficos en la aplicación web.' : 'See charts in web app.'}`, 14, 38);
+        const sv = ev - pv;
+        const cv = ev - ac;
+        const etcSel = getETCEscenario(escenarioETC, bac, ev, cpi, spi);
+        const eacSel = ac + etcSel;
+        const vacSel = bac - eacSel;
+        const proy = getProyeccionProyecto();
+        doc.setFontSize(10);
+        let y = 30;
+        const lineas = doc.splitTextToSize(
+            `${idioma === 'es' ? 'Resumen' : 'Summary'}: BAC ${formatearMoneda(bac)} | SPI ${spi.toFixed(3)} | CPI ${cpi.toFixed(3)}\n` +
+            `SV ${formatearMoneda(sv)} | CV ${formatearMoneda(cv)} | EAC ${formatearMoneda(eacSel)} | VAC ${formatearMoneda(vacSel)}\n` +
+            (proy ? `${t('projectionEndDate')}: ${formatearFecha(proy.fechaFin)} (${proy.diasCalendario} ${idioma === 'es' ? 'días calendario' : 'calendar days'})` : ''),
+            pageW - 28
+        );
+        doc.text(lineas, 14, y);
     } else if (tipo === 'bitacora') {
         addHeader(`${t('tabBitacora')} — ${nombre}`);
         doc.setFontSize(10);
