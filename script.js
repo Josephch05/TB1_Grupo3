@@ -1292,6 +1292,7 @@ function calcularBackwardPass() {
             if (sucLinks.length) {
                 LF = Math.min(...sucLinks.map(({ suc, link }) => calcularLFDesdeSucesor(act, link, suc)));
             }
+            LF = Math.min(LF, total);
             const LS = LF - act.duracion;
             if (act.LF !== LF || act.LS !== LS) {
                 act.LF = LF;
@@ -1307,6 +1308,10 @@ function calcularHolguraYCritica() {
         a.holgura = a.LS - a.ES;
         a.esCritica = a.holgura === 0;
     });
+    if (actividades.length && !actividades.some(a => a.esCritica)) {
+        const minH = Math.min(...actividades.map(a => a.holgura));
+        actividades.forEach(a => { if (a.holgura === minH) a.esCritica = true; });
+    }
 }
 
 function calcularSumaGantt() {
@@ -2193,11 +2198,29 @@ function bitacoraGuardarSeleccion() {
     persistirBitacora();
 }
 
+function bitacoraAsegurarSeleccion() {
+    const editor = getBitacoraEditor();
+    if (!editor) return false;
+    editor.focus();
+    if (bitacoraRestaurarRango()) return true;
+    const sel = window.getSelection();
+    if (sel?.rangeCount) {
+        const range = sel.getRangeAt(0);
+        if (editor.contains(range.commonAncestorContainer) && !range.collapsed) return true;
+    }
+    if (editor.textContent.trim()) {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+    return true;
+}
+
 function bitacoraWrapStyle(styleObj) {
     const editor = getBitacoraEditor();
     if (!editor) return;
-    bitacoraRestaurarRango();
-    editor.focus();
+    bitacoraAsegurarSeleccion();
     const sel = window.getSelection();
     if (!sel?.rangeCount) return;
     const range = sel.getRangeAt(0);
@@ -2220,10 +2243,12 @@ function bitacoraWrapStyle(styleObj) {
 }
 
 function bitacoraAplicarFuente(fuente) {
-    bitacoraWrapStyle({ fontFamily: `'${fuente}', 'Segoe UI', Arial, sans-serif` });
+    bitacoraWrapStyle({ fontFamily: `"${fuente}", "Segoe UI", Arial, sans-serif` });
 }
 
 function bitacoraAplicarTamano(px) {
+    bitacoraAsegurarSeleccion();
+    document.execCommand('styleWithCSS', false, true);
     bitacoraWrapStyle({ fontSize: px, lineHeight: '1.7' });
 }
 
@@ -2295,20 +2320,27 @@ function crearToolbarBitacora(containerId) {
 
     const selSize = document.createElement('select');
     selSize.title = idioma === 'es' ? 'Tamaño' : 'Size';
-    [{ v: '12px', l: 'Pequeño' }, { v: '14px', l: 'Normal' }, { v: '18px', l: 'Grande' }, { v: '24px', l: 'Muy grande' }]
-        .forEach(({ v, l }) => { const o = document.createElement('option'); o.value = v; o.textContent = l; selSize.appendChild(o); });
+    for (let s = 8; s <= 20; s++) {
+        const o = document.createElement('option');
+        o.value = `${s}px`;
+        o.textContent = `${s} pt`;
+        selSize.appendChild(o);
+    }
     selSize.value = '14px';
     selSize.addEventListener('mousedown', e => { e.preventDefault(); bitacoraGuardarRango(); });
-    selSize.addEventListener('change', e => bitacoraAplicarTamano(e.target.value));
+    selSize.addEventListener('focus', () => bitacoraGuardarRango());
+    selSize.addEventListener('change', e => setTimeout(() => bitacoraAplicarTamano(e.target.value), 0));
     tb.appendChild(selSize);
 
     const selFont = document.createElement('select');
     selFont.title = idioma === 'es' ? 'Tipo de letra' : 'Font';
-    ['Segoe UI', 'Arial', 'Times New Roman', 'Courier New'].forEach(f => {
-        const o = document.createElement('option'); o.value = f; o.textContent = f; selFont.appendChild(o);
-    });
+    ['Aptos', 'Times New Roman', 'Abadi', 'Arial', 'Calibri', 'Georgia', 'Verdana', 'Tahoma', 'Courier New', 'Segoe UI']
+        .forEach(f => {
+            const o = document.createElement('option'); o.value = f; o.textContent = f; selFont.appendChild(o);
+        });
     selFont.addEventListener('mousedown', e => { e.preventDefault(); bitacoraGuardarRango(); });
-    selFont.addEventListener('change', e => bitacoraAplicarFuente(e.target.value));
+    selFont.addEventListener('focus', () => bitacoraGuardarRango());
+    selFont.addEventListener('change', e => setTimeout(() => bitacoraAplicarFuente(e.target.value), 0));
     tb.appendChild(selFont);
 
     addSep();
@@ -2498,8 +2530,133 @@ function dibujarEscenariosInforme(bac, ev, ac, cpi, spi) {
 }
 
 /* --- Exportación extendida --- */
+const EXCEL_HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC8102E' } };
+const EXCEL_HEADER_FONT = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Calibri' };
+const EXCEL_CENTER = { vertical: 'middle', horizontal: 'center', wrapText: true };
+const EXCEL_BORDER = {
+    top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+};
+const EXCEL_ALT_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+const EXCEL_CRIT_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+const EXCEL_CORTE_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+
+function estilizarHojaExcel(ws, titulo, headers, rows, opts = {}) {
+    const numCols = headers.length;
+    const offsetCol = Math.max(1, Math.floor((16 - numCols) / 2));
+    const startRow = 2;
+
+    ws.mergeCells(startRow, offsetCol, startRow, offsetCol + numCols - 1);
+    const titleCell = ws.getCell(startRow, offsetCol);
+    titleCell.value = titulo;
+    titleCell.font = { bold: true, size: 14, color: { argb: 'FFC8102E' }, name: 'Calibri' };
+    titleCell.alignment = EXCEL_CENTER;
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+
+    const headerRowNum = startRow + 2;
+    headers.forEach((h, i) => {
+        const cell = ws.getCell(headerRowNum, offsetCol + i);
+        cell.value = h;
+        cell.fill = EXCEL_HEADER_FILL;
+        cell.font = EXCEL_HEADER_FONT;
+        cell.alignment = EXCEL_CENTER;
+        cell.border = EXCEL_BORDER;
+    });
+
+    rows.forEach((rowData, rIdx) => {
+        const rowNum = headerRowNum + 1 + rIdx;
+        const isCrit = opts.critCol >= 0 && rowData[opts.critCol] === 'SI';
+        const isCorte = opts.corteCol >= 0 && rowData[opts.corteCol] === 'SI';
+        rowData.forEach((val, cIdx) => {
+            const cell = ws.getCell(rowNum, offsetCol + cIdx);
+            cell.value = val;
+            cell.alignment = EXCEL_CENTER;
+            cell.border = EXCEL_BORDER;
+            cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF1E293B' } };
+            if (isCrit) {
+                cell.fill = EXCEL_CRIT_FILL;
+                cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FFC8102E' } };
+            } else if (isCorte) {
+                cell.fill = EXCEL_CORTE_FILL;
+                cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF92400E' } };
+            } else if (rIdx % 2 === 1) {
+                cell.fill = EXCEL_ALT_FILL;
+            }
+        });
+    });
+
+    for (let c = 0; c < numCols; c++) {
+        const col = ws.getColumn(offsetCol + c);
+        col.width = Math.max(headers[c].length + 4, 12);
+    }
+}
+
+async function exportarExcelEstilizado() {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'TB1 Planificador';
+    const nombre = getNombreProyecto();
+
+    if (actividades.length) {
+        const ws = wb.addWorksheet('Cronograma');
+        const headers = ['ID', 'Actividad', 'Duracion', 'Unidad', 'Presupuesto', 'Predecesoras',
+            'Inicio', 'Fin', 'ES', 'EF', 'LS', 'LF', 'Holgura', 'Critica'];
+        const rows = actividades.map(a => [
+            a.id, a.nombre, a.duracion, getUnidadLabel(),
+            parseFloat(a.presupuesto) || 0, formatearPredecesoras(a.predecesoras),
+            getFechaInicioActividad(a), getFechaFinActividad(a),
+            a.ES, a.EF, a.LS, a.LF, a.holgura, a.esCritica ? 'SI' : 'NO'
+        ]);
+        estilizarHojaExcel(ws, `${nombre} — Cronograma`, headers, rows, { critCol: 13 });
+    }
+
+    if (periodosEVM.length) {
+        const ws = wb.addWorksheet('Valor Ganado');
+        const headers = ['Periodo', 'Avance %', 'PV Parcial', 'PV Acum', 'AC Parcial', 'AC Acum',
+            'EV Parcial', 'EV Acum', 'Corte'];
+        const rows = periodosEVM.map((p, idx) => [
+            getEtiquetaTiempo(p.tiempo), parseFloat(p.avance) || 0,
+            p.pptoParcial, p.pptoAcum, p.costoParcial || 0, p.costoAcum,
+            p.trabajoParcial, p.trabajoAcum, (idx + 1) === diaCorte ? 'SI' : 'NO'
+        ]);
+        estilizarHojaExcel(ws, `${nombre} — Valor Ganado`, headers, rows, { corteCol: 8 });
+    }
+
+    const { pv, ev, ac, bac } = getDatosCorte();
+    const spi = pv > 0 ? ev / pv : 0;
+    const cpi = ac > 0 ? ev / ac : 0;
+    const wsInd = wb.addWorksheet('Indicadores');
+    const indHeaders = ['Indicador', 'Valor'];
+    const indRows = [
+        ['BAC', bac], ['PV', pv], ['EV', ev], ['AC', ac],
+        ['SPI', spi], ['CPI', cpi], ['SV', ev - pv], ['CV', ev - ac],
+        ['TCPI_BAC', (bac - ac) > 0 ? (bac - ev) / (bac - ac) : 0]
+    ];
+    estilizarHojaExcel(wsInd, `${nombre} — Indicadores EVM`, indHeaders, indRows);
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'TB1_Completo.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
 function exportarExcelCompleto() {
+    if (typeof ExcelJS !== 'undefined') {
+        exportarExcelEstilizado().catch(() => {
+            if (typeof XLSX === 'undefined') { alert(t('alertNoExcel')); return; }
+            exportarExcelBasico();
+        });
+        return;
+    }
     if (typeof XLSX === 'undefined') { alert(t('alertNoExcel')); return; }
+    exportarExcelBasico();
+}
+
+function exportarExcelBasico() {
     const wb = XLSX.utils.book_new();
     if (actividades.length) {
         const rows = actividades.map(a => ({
