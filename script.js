@@ -23,6 +23,7 @@ let bitacoraNotas = [{ id: 1, titulo: 'Nota 1', html: '' }];
 let bitacoraNotaActiva = 1;
 let bitacoraSiguienteId = 2;
 let bitacoraPanelAbierto = false;
+let bitacoraRangoGuardado = null;
 let tabActual = 0;
 let mapaCalendario = [];
 let diasCalendarioGantt = [];
@@ -48,6 +49,14 @@ const traducciones = {
         activityRegister: 'Registro de Actividades', activityName: 'Nombre de la Actividad',
         duration: 'Duración', budget: 'Presupuesto Parcial (BAC actividad)',
         predecessors: 'Predecesoras', predecessorsHint: 'FC, CC, FF o CF. Ej: 1, 2CC+1, 3FF+2. Por defecto FC.',
+        predecessorsList: 'Predecesoras — Lista (Ctrl + Click)',
+        predecessorsText: 'Predecesoras — Texto avanzado (FC, CC, FF, CF + lag)',
+        predecessorsDualHint: 'Use la lista, el texto, o combine ambas. En la lista se asume FC.',
+        newProject: 'Nuevo Proyecto', confirmNewProject: '¿Iniciar un proyecto vacío? Se perderán los datos no guardados.',
+        loadExample: 'Cargar Ejemplo',
+        exampleBuilding: 'Ejemplo: Edificio residencial',
+        exampleRoad: 'Ejemplo: Carretera',
+        exampleBridge: 'Ejemplo: Puente vehicular',
         workInSlack: 'Trabajar en holgura (% distribuido en trabajo + holgura)',
         workInSlackHint: 'Sin check: 100% solo en días de trabajo (ej. 5 días = 20% c/u). Con check: 100% en trabajo + holgura (ej. 10 días = 10% c/u).',
         saveChanges: 'Guardar cambios',
@@ -100,7 +109,7 @@ const traducciones = {
         projectionEndDate: 'Fecha estimada de culminación',
         projectionNonWork: 'Días no laborables en el período',
         saveProject: 'Guardar proyecto', loadProject: 'Cargar proyecto',
-        exportJSON: 'Exportar JSON', loadExample: 'Cargar ejemplo',
+        exportJSON: 'Exportar JSON',
         calendarTitle: 'Calendario Laboral',
         calendarHint: 'Activo solo con unidad «Días». Calcula feriados automáticamente desde la fecha de inicio hasta el fin del cronograma.',
         calendarActive: 'Activar calendario laboral',
@@ -149,6 +158,14 @@ const traducciones = {
         activityRegister: 'Activity Register', activityName: 'Activity Name',
         duration: 'Duration', budget: 'Partial Budget (activity BAC)',
         predecessors: 'Predecessors', predecessorsHint: 'FC, CC, FF or CF. E.g. 1, 2SS+1. Default FC.',
+        predecessorsList: 'Predecessors — List (Ctrl + Click)',
+        predecessorsText: 'Predecessors — Advanced text (FC, CC, FF, CF + lag)',
+        predecessorsDualHint: 'Use the list, text, or both. List assumes FC.',
+        newProject: 'New Project', confirmNewProject: 'Start an empty project? Unsaved data will be lost.',
+        loadExample: 'Load Example',
+        exampleBuilding: 'Example: Residential building',
+        exampleRoad: 'Example: Road project',
+        exampleBridge: 'Example: Bridge',
         workInSlack: 'Work in slack (% split across work + slack days)',
         workInSlackHint: 'Unchecked: 100% on work days only (e.g. 5 days = 20% each). Checked: 100% on work + slack (e.g. 10 days = 10% each).',
         saveChanges: 'Save changes',
@@ -201,7 +218,7 @@ const traducciones = {
         projectionEndDate: 'Estimated completion date',
         projectionNonWork: 'Non-work days in period',
         saveProject: 'Save project', loadProject: 'Load project',
-        exportJSON: 'Export JSON', loadExample: 'Load example',
+        exportJSON: 'Export JSON',
         calendarTitle: 'Work Calendar',
         calendarHint: 'Active only with «Days» unit. Auto-calculates holidays from project start through schedule end.',
         calendarActive: 'Enable work calendar',
@@ -318,6 +335,50 @@ function getPeriodosDistribucion(act) {
     if (!trabajarEnHolgura) return trabajo;
     const holgura = getPeriodosHolgura(act).filter(i => !trabajo.includes(i));
     return [...trabajo, ...holgura];
+}
+
+function combinarPredecesoras(selectId, textoId) {
+    const map = new Map();
+    const sel = document.getElementById(selectId);
+    if (sel) {
+        Array.from(sel.selectedOptions).forEach(o => {
+            map.set(parseInt(o.value), { id: parseInt(o.value), tipo: 'FC', lag: 0 });
+        });
+    }
+    parsePredecesorasTexto(document.getElementById(textoId)?.value || '').forEach(p => {
+        map.set(p.id, p);
+    });
+    return Array.from(map.values());
+}
+
+function llenarSelectPredecesoras(selectId, excluirId, depsActuales) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const idsEnDeps = new Set((depsActuales || []).map(p => p.id));
+    sel.innerHTML = '';
+    actividades.filter(a => a.id !== excluirId).forEach(a => {
+        const o = document.createElement('option');
+        o.value = a.id;
+        o.textContent = `${a.id} - ${a.nombre}`;
+        o.selected = idsEnDeps.has(a.id);
+        sel.appendChild(o);
+    });
+}
+
+function separarPredecesorasParaUI(deps) {
+    const normalizadas = (deps || []).map(p =>
+        typeof p === 'object' && p?.id != null ? { ...p } : { id: p, tipo: 'FC', lag: 0 }
+    );
+    normalizarPredecesoras({ predecesoras: normalizadas });
+    const lista = normalizadas.filter(p => p.tipo === 'FC' && !p.lag).map(p => p.id);
+    const texto = normalizadas.filter(p => p.tipo !== 'FC' || p.lag).map(p => {
+        if (p.tipo === 'FC' && p.lag) return `${p.id}${p.lag > 0 ? '+' + p.lag : p.lag}`;
+        let s = `${p.id}${p.tipo}`;
+        if (p.lag > 0) s += `+${p.lag}`;
+        else if (p.lag < 0) s += p.lag;
+        return s;
+    }).join(', ');
+    return { lista, texto };
 }
 
 function getUnidadLabel() {
@@ -632,8 +693,9 @@ function abrirModalEditar(id) {
     document.getElementById('editNombre').value = act.nombre;
     document.getElementById('editDuracion').value = act.duracion;
     document.getElementById('editPresupuesto').value = act.presupuesto;
-    document.getElementById('editPredecesoras').value = act.predecesoras?.length
-        ? formatearPredecesoras(act.predecesoras).replace(/^-$/, '') : '';
+    const { lista, texto } = separarPredecesorasParaUI(act.predecesoras);
+    llenarSelectPredecesoras('editPredecesorasSelect', id, lista.map(id => ({ id })));
+    document.getElementById('editPredecesorasTexto').value = texto;
     document.getElementById('modalEditar').classList.add('activo');
 }
 
@@ -654,7 +716,7 @@ function guardarEdicionActividad() {
     act.nombre = nombre;
     act.duracion = duracion;
     act.presupuesto = parseFloat(document.getElementById('editPresupuesto').value) || 0;
-    act.predecesoras = parsePredecesorasTexto(document.getElementById('editPredecesoras').value);
+    act.predecesoras = combinarPredecesoras('editPredecesorasSelect', 'editPredecesorasTexto');
     act.porcentajes = {};
     act.porcentajesHolgura = {};
     cerrarModalEditar();
@@ -718,6 +780,7 @@ function aplicarEstadoProyecto(estado) {
     actualizarFeriados(true);
     renderBitacoraTabs();
     sincronizarBitacoraUI();
+    actualizarSelectDependencias();
     cambiarIdioma();
     calcularTodo();
 }
@@ -753,26 +816,122 @@ function cargarProyecto(event) {
 }
 
 function cargarProyectoEjemplo() {
+    const tipo = document.getElementById('selectorEjemplo')?.value || 'edificio';
     const hoy = new Date();
     const iso = hoy.toISOString().slice(0, 10);
+    const es = idioma === 'es';
+    const ejemplos = {
+        edificio: {
+            nombreProyecto: es ? 'Edificio Residencial Demo' : 'Residential Building Demo',
+            actividades: [
+                { id: 1, nombre: es ? 'Excavación' : 'Excavation', duracion: 5, presupuesto: 15000, predecesoras: [], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 2, nombre: es ? 'Cimentación' : 'Foundation', duracion: 8, presupuesto: 45000, predecesoras: [1], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 3, nombre: es ? 'Estructura' : 'Structure', duracion: 20, presupuesto: 120000, predecesoras: [2], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 4, nombre: es ? 'Instalaciones' : 'MEP', duracion: 12, presupuesto: 55000, predecesoras: [3], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 5, nombre: es ? 'Acabados' : 'Finishes', duracion: 10, presupuesto: 35000, predecesoras: [4], porcentajes: {}, porcentajesHolgura: {} }
+            ],
+            evm: [[0, 8, 4200], [1, 15, 9800], [2, 22, 18500], [3, 35, 24000], [4, 42, 31000], [5, 48, 35000]]
+        },
+        carretera: {
+            nombreProyecto: es ? 'Ampliación Carretera Norte' : 'North Highway Expansion',
+            actividades: [
+                { id: 1, nombre: es ? 'Trazo y replanteo' : 'Survey & layout', duracion: 4, presupuesto: 12000, predecesoras: [], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 2, nombre: es ? 'Desbroce y limpieza' : 'Clearing', duracion: 6, presupuesto: 28000, predecesoras: [{ id: 1, tipo: 'FC', lag: 0 }], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 3, nombre: es ? 'Terraplén' : 'Embankment', duracion: 15, presupuesto: 95000, predecesoras: [{ id: 2, tipo: 'FC', lag: 0 }], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 4, nombre: es ? 'Base granular' : 'Granular base', duracion: 10, presupuesto: 72000, predecesoras: [{ id: 3, tipo: 'FC', lag: 0 }], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 5, nombre: es ? 'Asfaltado' : 'Paving', duracion: 8, presupuesto: 88000, predecesoras: [{ id: 4, tipo: 'FC', lag: 0 }], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 6, nombre: es ? 'Señalización' : 'Signage', duracion: 5, presupuesto: 18000, predecesoras: [{ id: 5, tipo: 'CC', lag: 2 }], porcentajes: {}, porcentajesHolgura: {} }
+            ],
+            evm: [[0, 10, 3500], [1, 18, 8200], [2, 25, 15000], [3, 32, 22000], [4, 40, 28000], [5, 55, 42000], [6, 62, 48000]]
+        },
+        puente: {
+            nombreProyecto: es ? 'Puente Vehicular Río Seco' : 'Rio Seco Bridge',
+            actividades: [
+                { id: 1, nombre: es ? 'Estudios geotécnicos' : 'Geotechnical studies', duracion: 7, presupuesto: 22000, predecesoras: [], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 2, nombre: es ? 'Enrocado y pilotes' : 'Riprap & piles', duracion: 12, presupuesto: 185000, predecesoras: [1], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 3, nombre: es ? 'Pilas y estribos' : 'Piers & abutments', duracion: 18, presupuesto: 210000, predecesoras: [2], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 4, nombre: es ? 'Vigas y losa' : 'Girders & deck', duracion: 14, presupuesto: 165000, predecesoras: [3], porcentajes: {}, porcentajesHolgura: {} },
+                { id: 5, nombre: es ? 'Barandas y acabados' : 'Railings & finishes', duracion: 6, presupuesto: 38000, predecesoras: [{ id: 4, tipo: 'FF', lag: 0 }], porcentajes: {}, porcentajesHolgura: {} }
+            ],
+            evm: [[0, 12, 6000], [1, 20, 14000], [2, 28, 28000], [3, 38, 45000], [4, 45, 62000], [5, 52, 78000], [6, 58, 92000]]
+        }
+    };
+    const ej = ejemplos[tipo] || ejemplos.edificio;
     aplicarEstadoProyecto({
-        nombreProyecto: idioma === 'es' ? 'Edificio Residencial Demo' : 'Residential Building Demo',
+        nombreProyecto: ej.nombreProyecto,
         projectStartDate: iso,
         unidadTiempo: 'dias', modoAvance: 'planeado', idioma, moneda,
-        actividades: [
-            { id: 1, nombre: idioma === 'es' ? 'Excavación' : 'Excavation', duracion: 5, presupuesto: 15000, predecesoras: [], porcentajes: {}, ES: 0, EF: 0, LS: 0, LF: 0, holgura: 0, esCritica: false },
-            { id: 2, nombre: idioma === 'es' ? 'Cimentación' : 'Foundation', duracion: 8, presupuesto: 45000, predecesoras: [1], porcentajes: {}, ES: 0, EF: 0, LS: 0, LF: 0, holgura: 0, esCritica: false },
-            { id: 3, nombre: idioma === 'es' ? 'Estructura' : 'Structure', duracion: 20, presupuesto: 120000, predecesoras: [2], porcentajes: {}, ES: 0, EF: 0, LS: 0, LF: 0, holgura: 0, esCritica: false },
-            { id: 4, nombre: idioma === 'es' ? 'Instalaciones' : 'MEP', duracion: 12, presupuesto: 55000, predecesoras: [3], porcentajes: {}, ES: 0, EF: 0, LS: 0, LF: 0, holgura: 0, esCritica: false },
-            { id: 5, nombre: idioma === 'es' ? 'Acabados' : 'Finishes', duracion: 10, presupuesto: 35000, predecesoras: [4], porcentajes: {}, ES: 0, EF: 0, LS: 0, LF: 0, holgura: 0, esCritica: false }
-        ],
+        actividades: ej.actividades.map(a => ({ ...a, ES: 0, EF: 0, LS: 0, LF: 0, holgura: 0, esCritica: false })),
         periodosEVM: [], diaCorte: 1, escenarioETC: 'probable',
         holguraPorcentaje: false, trabajarEnHolgura: false, calendarioActivo: false,
         diasLaborables: [1, 2, 3, 4, 5],
         diasNoLaborablesCustom: [],
-        bitacoraNotas: [{ id: 1, titulo: 'Nota 1', html: '' }],
+        bitacoraNotas: [{ id: 1, titulo: es ? 'Nota 1' : 'Note 1', html: es ? '<p>Proyecto de ejemplo cargado.</p>' : '<p>Example project loaded.</p>' }],
         bitacoraNotaActiva: 1, bitacoraSiguienteId: 2
     });
+    rellenarEVMEjemplo(ej.evm);
+}
+
+function rellenarEVMEjemplo(pares) {
+    if (!pares?.length || !periodosEVM.length) return;
+    pares.forEach(([idx, avance, costo]) => {
+        if (periodosEVM[idx]) {
+            periodosEVM[idx].avance = avance;
+            periodosEVM[idx].avanceManual = avance;
+            periodosEVM[idx].costoParcial = costo;
+        }
+    });
+    diaCorte = Math.min(pares.length, periodosEVM.length);
+    const sel = document.getElementById('diaCorte');
+    if (sel) sel.value = diaCorte;
+    recalcularEVM();
+    generarAnalisisGerencial();
+}
+
+function inicializarProyectoVacio() {
+    actividades = [];
+    projectStartDate = null;
+    periodosEVM = [];
+    diaCorte = 1;
+    escenarioETC = 'probable';
+    holguraPorcentaje = false;
+    trabajarEnHolgura = false;
+    calendarioActivo = false;
+    diasLaborables = [1, 2, 3, 4, 5];
+    diasNoLaborablesCustom = [];
+    bitacoraNotas = [{ id: 1, titulo: idioma === 'es' ? 'Nota 1' : 'Note 1', html: '' }];
+    bitacoraNotaActiva = 1;
+    bitacoraSiguienteId = 2;
+    const np = document.getElementById('nombreProyecto');
+    if (np) np.value = '';
+    const fi = document.getElementById('fechaInicioProyecto');
+    if (fi) fi.value = '';
+    document.getElementById('unidadTiempo').value = unidadTiempo;
+    document.getElementById('modoAvance').value = modoAvance;
+    document.getElementById('escenarioETC').value = escenarioETC;
+    const holgEl = document.getElementById('holguraPorcentaje');
+    if (holgEl) holgEl.checked = false;
+    const trabHolgEl = document.getElementById('trabajarEnHolgura');
+    if (trabHolgEl) trabHolgEl.checked = false;
+    const calEl = document.getElementById('calendarioActivo');
+    if (calEl) { calEl.checked = false; togglePanelCalendario(); }
+    document.querySelectorAll('.dia-lab').forEach(cb => {
+        cb.checked = diasLaborables.includes(parseInt(cb.value));
+    });
+    const dt = document.getElementById('dependenciaTexto');
+    if (dt) dt.value = '';
+    const et = document.getElementById('editPredecesorasTexto');
+    if (et) et.value = '';
+    actualizarSelectDependencias();
+    renderBitacoraTabs();
+    sincronizarBitacoraUI();
+    calcularTodo();
+}
+
+function nuevoProyecto() {
+    if (actividades.length && !confirm(t('confirmNewProject'))) return;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+    inicializarProyectoVacio();
 }
 
 function togglePanelCalendario() {
@@ -842,29 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inicializarCalendarioUI();
     inicializarBitacora();
     iniciarAutoSave();
-    try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) aplicarEstadoProyecto(JSON.parse(saved));
-        else {
-            const bit = localStorage.getItem(BITACORA_KEY);
-            if (bit) {
-                try {
-                    const parsed = JSON.parse(bit);
-                    if (parsed.notas) {
-                        bitacoraNotas = parsed.notas;
-                        bitacoraNotaActiva = parsed.activa || 1;
-                        bitacoraSiguienteId = parsed.siguienteId || 2;
-                    } else {
-                        bitacoraNotas = [{ id: 1, titulo: 'Nota 1', html: bit }];
-                    }
-                } catch (_) {
-                    bitacoraNotas = [{ id: 1, titulo: 'Nota 1', html: bit }];
-                }
-                renderBitacoraTabs();
-                sincronizarBitacoraUI();
-            }
-        }
-    } catch (e) { /* ignore */ }
+    inicializarProyectoVacio();
     openTab(0);
     cambiarIdioma();
 });
@@ -960,7 +1097,7 @@ function agregarActividad() {
     const nombre = document.getElementById('actividad').value.trim();
     const duracion = parseInt(document.getElementById('duracion').value);
     const presupuesto = parseFloat(document.getElementById('presupuesto').value) || 0;
-    const predecesoras = parsePredecesorasTexto(document.getElementById('dependencia').value);
+    const predecesoras = combinarPredecesoras('dependenciaSelect', 'dependenciaTexto');
     if (!nombre || !duracion || !projectStartDate) {
         alert(t('alertFillFields'));
         return;
@@ -983,12 +1120,15 @@ function agregarActividad() {
     document.getElementById('actividad').value = '';
     document.getElementById('duracion').value = '';
     document.getElementById('presupuesto').value = '';
-    document.getElementById('dependencia').value = '';
+    document.getElementById('dependenciaTexto').value = '';
+    const selDep = document.getElementById('dependenciaSelect');
+    if (selDep) Array.from(selDep.options).forEach(o => { o.selected = false; });
+    actualizarSelectDependencias();
     calcularTodo();
 }
 
 function actualizarSelectDependencias() {
-    /* predecesoras ahora se ingresan como texto FC/CC/FF/CF */
+    llenarSelectPredecesoras('dependenciaSelect', null, []);
 }
 
 function eliminarActividad(id) {
@@ -1292,12 +1432,7 @@ function renderGantt() {
                         ${modoAvance === 'planeado' && val > 0 ? `<small class="valor-celda valor-celda-holg">${val.toFixed(0)}</small>` : ''}
                     </td>`;
                 } else {
-                    if (!act.porcentajesHolgura) act.porcentajesHolgura = {};
-                    const hp = act.porcentajesHolgura[periodo] ?? '';
-                    html += `<td class="gantt-celda-holgura${clsExtra}">
-                        <input type="number" min="0" max="100" step="0.1" value="${hp}" class="input-pct"
-                            onchange="actualizarPorcentajeHolgura(${act.id}, ${periodo}, this.value)">
-                    </td>`;
+                    html += `<td class="gantt-celda-holgura${clsExtra}"></td>`;
                 }
             } else {
                 html += `<td class="gantt-celda-vacia${clsExtra}"></td>`;
@@ -1969,6 +2104,7 @@ function inicializarBitacora() {
     crearToolbarBitacora('bitacoraToolbar');
     const editor = getBitacoraEditor();
     if (editor) {
+        ['mouseup', 'keyup', 'focus'].forEach(ev => editor.addEventListener(ev, bitacoraGuardarRango));
         editor.addEventListener('input', () => {
             guardarNotaActivaDesdeEditor();
             persistirBitacora();
@@ -2032,6 +2168,26 @@ function renombrarNotaBitacora(id) {
     }
 }
 
+function bitacoraGuardarRango() {
+    const editor = getBitacoraEditor();
+    const sel = window.getSelection();
+    if (!editor || !sel?.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (editor.contains(range.commonAncestorContainer)) {
+        bitacoraRangoGuardado = range.cloneRange();
+    }
+}
+
+function bitacoraRestaurarRango() {
+    const editor = getBitacoraEditor();
+    if (!editor || !bitacoraRangoGuardado) return false;
+    editor.focus();
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(bitacoraRangoGuardado);
+    return true;
+}
+
 function bitacoraGuardarSeleccion() {
     guardarNotaActivaDesdeEditor();
     persistirBitacora();
@@ -2040,34 +2196,26 @@ function bitacoraGuardarSeleccion() {
 function bitacoraWrapStyle(styleObj) {
     const editor = getBitacoraEditor();
     if (!editor) return;
+    bitacoraRestaurarRango();
     editor.focus();
     const sel = window.getSelection();
     if (!sel?.rangeCount) return;
     const range = sel.getRangeAt(0);
+    const estilo = Object.entries(styleObj).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';');
     if (range.collapsed) {
-        const span = document.createElement('span');
-        Object.assign(span.style, styleObj);
-        span.appendChild(document.createTextNode('\u200B'));
-        range.insertNode(span);
-        range.setStart(span.firstChild, 1);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
+        document.execCommand('insertHTML', false, `<span style="${estilo}">\u200B</span>`);
     } else {
+        const contenido = range.extractContents();
         const span = document.createElement('span');
         Object.assign(span.style, styleObj);
-        try {
-            range.surroundContents(span);
-        } catch (_) {
-            const fragment = range.extractContents();
-            span.appendChild(fragment);
-            range.insertNode(span);
-        }
+        span.appendChild(contenido);
+        range.insertNode(span);
         sel.removeAllRanges();
         const nr = document.createRange();
         nr.selectNodeContents(span);
         sel.addRange(nr);
     }
+    bitacoraGuardarRango();
     bitacoraGuardarSeleccion();
 }
 
@@ -2076,12 +2224,13 @@ function bitacoraAplicarFuente(fuente) {
 }
 
 function bitacoraAplicarTamano(px) {
-    bitacoraWrapStyle({ fontSize: px });
+    bitacoraWrapStyle({ fontSize: px, lineHeight: '1.7' });
 }
 
 function bitacoraExec(cmd, val) {
     const editor = getBitacoraEditor();
     if (!editor) return;
+    bitacoraRestaurarRango();
     editor.focus();
     try {
         document.execCommand('styleWithCSS', false, true);
@@ -2091,6 +2240,7 @@ function bitacoraExec(cmd, val) {
             document.execCommand(cmd, false, val ?? null);
         }
     } catch (e) { /* ignore */ }
+    bitacoraGuardarRango();
     bitacoraGuardarSeleccion();
 }
 
@@ -2104,7 +2254,7 @@ function crearToolbarBitacora(containerId) {
         btn.type = 'button';
         btn.textContent = label;
         btn.title = title;
-        btn.addEventListener('mousedown', e => e.preventDefault());
+        btn.addEventListener('mousedown', e => { e.preventDefault(); bitacoraGuardarRango(); });
         btn.addEventListener('click', fn);
         tb.appendChild(btn);
         return btn;
@@ -2129,7 +2279,7 @@ function crearToolbarBitacora(containerId) {
     colorTexto.type = 'color';
     colorTexto.value = '#c8102e';
     colorTexto.title = idioma === 'es' ? 'Color del texto' : 'Text color';
-    colorTexto.addEventListener('mousedown', e => e.preventDefault());
+    colorTexto.addEventListener('mousedown', e => { e.preventDefault(); bitacoraGuardarRango(); });
     colorTexto.addEventListener('input', e => bitacoraExec('foreColor', e.target.value));
     tb.appendChild(colorTexto);
 
@@ -2137,7 +2287,7 @@ function crearToolbarBitacora(containerId) {
     colorFondo.type = 'color';
     colorFondo.value = '#fef08a';
     colorFondo.title = idioma === 'es' ? 'Resaltado' : 'Highlight';
-    colorFondo.addEventListener('mousedown', e => e.preventDefault());
+    colorFondo.addEventListener('mousedown', e => { e.preventDefault(); bitacoraGuardarRango(); });
     colorFondo.addEventListener('input', e => bitacoraExec('hiliteColor', e.target.value));
     tb.appendChild(colorFondo);
 
@@ -2148,7 +2298,7 @@ function crearToolbarBitacora(containerId) {
     [{ v: '12px', l: 'Pequeño' }, { v: '14px', l: 'Normal' }, { v: '18px', l: 'Grande' }, { v: '24px', l: 'Muy grande' }]
         .forEach(({ v, l }) => { const o = document.createElement('option'); o.value = v; o.textContent = l; selSize.appendChild(o); });
     selSize.value = '14px';
-    selSize.addEventListener('mousedown', e => e.preventDefault());
+    selSize.addEventListener('mousedown', e => { e.preventDefault(); bitacoraGuardarRango(); });
     selSize.addEventListener('change', e => bitacoraAplicarTamano(e.target.value));
     tb.appendChild(selSize);
 
@@ -2157,7 +2307,7 @@ function crearToolbarBitacora(containerId) {
     ['Segoe UI', 'Arial', 'Times New Roman', 'Courier New'].forEach(f => {
         const o = document.createElement('option'); o.value = f; o.textContent = f; selFont.appendChild(o);
     });
-    selFont.addEventListener('mousedown', e => e.preventDefault());
+    selFont.addEventListener('mousedown', e => { e.preventDefault(); bitacoraGuardarRango(); });
     selFont.addEventListener('change', e => bitacoraAplicarFuente(e.target.value));
     tb.appendChild(selFont);
 
