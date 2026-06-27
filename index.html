@@ -5,157 +5,398 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TB1 - Planificador de Obras Civiles | Joseph</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
-    <div class="container">
+<div class="container">
 
-        <header>
-            <h1>🏗️ Planificador de Obras Civiles - TB1</h1>
-            <p>Planificación y Control de Obras - C1579</p>
-        </header>
+    <header>
+        <h1 data-i18n="appTitle">Planificador de Obras Civiles - TB1</h1>
+        <p data-i18n="appSubtitle">Planificación y Control de Obras - CI579</p>
+    </header>
 
-        <!-- Pestañas -->
-        <div class="tabs">
-            <button class="tab active" onclick="openTab(0)">📅 Cronograma + Gantt + Ruta Crítica</button>
-            <button class="tab" onclick="openTab(1)">📊 Valor Ganado (EVM)</button>
-        </div>
+    <div id="panelValidaciones" class="panel-validaciones no-print" style="display:none;"></div>
 
-        <!-- ==================== TAB 0: CRONOGRAMA ==================== -->
-        <div id="tab0" class="tab-content">
+    <div class="tabs no-print">
+        <button class="tab active" onclick="openTab(0)" data-i18n="tabSchedule">Cronograma + Gantt</button>
+        <button class="tab" onclick="openTab(1)" data-i18n="tabEVM">Valor Ganado + Análisis</button>
+        <button class="tab" onclick="openTab(2)" data-i18n="tabReport">Informe Ejecutivo</button>
+        <button class="tab" onclick="openTab(3)" data-i18n="tabLog">Bitácora del Proyecto</button>
+    </div>
 
-            <section class="card">
-                <h2>Datos del Proyecto</h2>
-                <div class="grid">
-                    <div>
-                        <label>Nombre del Proyecto</label>
-                        <input type="text" id="nombreProyecto" placeholder="Ej. Edificio Multifamiliar">
-                    </div>
-                    <div>
-                        <label>Fecha de Inicio</label>
-                        <input type="date" id="fechaInicioProyecto">
-                    </div>
-                    <div>
-                        <label>Unidad de Tiempo</label>
-                        <select id="unidadTiempo">
-                            <option value="dias">Días</option>
-                            <option value="semanas">Semanas</option>
-                            <option value="meses">Meses</option>
-                        </select>
-                    </div>
+    <!-- TAB 0 -->
+    <div id="tab0" class="tab-content">
+
+        <section class="card">
+            <h2 data-i18n="projectData">Datos del Proyecto</h2>
+            <div class="grid">
+                <div>
+                    <label data-i18n="projectName">Nombre del Proyecto</label>
+                    <input type="text" id="nombreProyecto" placeholder="Ej. Edificio Multifamiliar">
                 </div>
-            </section>
-
-            <section class="card">
-                <h2>Registro de Actividades</h2>
-                <div class="grid">
-                    <div>
-                        <label>Nombre de la Actividad</label>
-                        <input type="text" id="actividad" placeholder="Ej. Excavación de zanjas">
-                    </div>
-                    <div>
-                        <label>Duración</label>
-                        <input type="number" id="duracion" min="1" placeholder="5">
-                    </div>
-                    <div>
-                        <label>Predecesoras (Ctrl + Click para varias)</label>
-                        <select id="dependencia" multiple size="5" style="height: 110px;">
-                            <!-- Se llena automáticamente -->
-                        </select>
-                        <small style="color:#666; display:block; margin-top:5px;">
-                            Mantén presionado <strong>Ctrl</strong> (o Cmd en Mac) para seleccionar varias predecesoras
-                        </small>
-                    </div>
+                <div>
+                    <label data-i18n="startDate">Fecha de Inicio</label>
+                    <input type="date" id="fechaInicioProyecto">
                 </div>
-                <button onclick="agregarActividad()">+ Agregar Actividad</button>
-            </section>
+                <div>
+                    <label data-i18n="timeUnit">Unidad de Tiempo</label>
+                    <select id="unidadTiempo">
+                        <option value="dias" data-i18n="days">Días</option>
+                        <option value="semanas" data-i18n="weeks">Semanas</option>
+                        <option value="meses" data-i18n="months">Meses</option>
+                    </select>
+                </div>
+                <div>
+                    <label data-i18n="advanceMode">Modo de % en Gantt</label>
+                    <select id="modoAvance">
+                        <option value="planeado" data-i18n="plannedMode">% Avance Planificado (suma 100%)</option>
+                        <option value="real" data-i18n="realMode">% Avance Real (va al Valor Ganado)</option>
+                    </select>
+                </div>
+                <div>
+                    <label data-i18n="language">Idioma</label>
+                    <select id="idioma">
+                        <option value="es">Español</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+                <div>
+                    <label data-i18n="currency">Moneda</label>
+                    <select id="moneda">
+                        <option value="S/.">S/. (Soles)</option>
+                        <option value="$">$ (Dólares)</option>
+                        <option value="€">€ (Euros)</option>
+                    </select>
+                </div>
+                <div class="toggle-row">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="holguraPorcentaje">
+                        <span data-i18n="slackPctToggle">Mostrar holgura en %</span>
+                    </label>
+                </div>
+            </div>
+            <div class="acciones-grupo no-print" style="margin-top:14px;">
+                <button class="btn-secundario" onclick="guardarProyecto()" data-i18n="saveProject">Guardar Proyecto</button>
+                <button class="btn-secundario" onclick="document.getElementById('inputCargarProyecto').click()" data-i18n="loadProject">Cargar Proyecto</button>
+                <input type="file" id="inputCargarProyecto" accept=".json" style="display:none" onchange="cargarProyecto(event)">
+                <button class="btn-secundario" onclick="exportarProyectoJSON()" data-i18n="exportProject">Exportar JSON</button>
+                <button class="btn-secundario" onclick="cargarProyectoEjemplo()" data-i18n="loadExample">Proyecto de Ejemplo</button>
+            </div>
+        </section>
 
-            <section class="card">
-                <h2>Cronograma del Proyecto</h2>
+        <section class="card">
+            <h2 data-i18n="calendarTitle">Calendario Laboral</h2>
+            <p class="subtitle" data-i18n="calendarHint">Configure días laborables y feriados. Afecta fechas reales cuando la unidad es Días.</p>
+            <div class="grid">
+                <div class="toggle-row">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="calendarioActivo">
+                        <span data-i18n="calendarActive">Activar calendario laboral</span>
+                    </label>
+                </div>
+                <div>
+                    <label data-i18n="calendarYear">Año de feriados nacionales</label>
+                    <select id="anioFeriados"></select>
+                </div>
+                <div>
+                    <label data-i18n="calendarDept">Departamentos (feriados regionales)</label>
+                    <select id="departamentosFeriados" multiple size="4"></select>
+                    <small class="hint" data-i18n="calendarDeptHint">Ctrl+Click para varios. Vacío = todos</small>
+                </div>
+            </div>
+            <div class="dias-laborables no-print">
+                <span data-i18n="workDays">Días laborables:</span>
+                <label><input type="checkbox" class="dia-lab" value="0"> Dom</label>
+                <label><input type="checkbox" class="dia-lab" value="1" checked> Lun</label>
+                <label><input type="checkbox" class="dia-lab" value="2" checked> Mar</label>
+                <label><input type="checkbox" class="dia-lab" value="3" checked> Mié</label>
+                <label><input type="checkbox" class="dia-lab" value="4" checked> Jue</label>
+                <label><input type="checkbox" class="dia-lab" value="5" checked> Vie</label>
+                <label><input type="checkbox" class="dia-lab" value="6"> Sáb</label>
+            </div>
+            <div class="grid" style="margin-top:12px;">
+                <div>
+                    <label data-i18n="customNonWork">Día no laborable personalizado</label>
+                    <input type="date" id="fechaNoLaborable">
+                </div>
+                <div>
+                    <label data-i18n="customNonWorkDesc">Descripción</label>
+                    <input type="text" id="descNoLaborable" placeholder="Ej. Paro, clima">
+                </div>
+            </div>
+            <div class="acciones-grupo no-print">
+                <button class="btn-secundario" onclick="agregarDiaNoLaborable()" data-i18n="addNonWork">+ Agregar día no laborable</button>
+            </div>
+            <div id="listaFeriados" class="lista-feriados"></div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="activityRegister">Registro de Actividades</h2>
+            <div class="grid">
+                <div>
+                    <label data-i18n="activityName">Nombre de la Actividad</label>
+                    <input type="text" id="actividad" placeholder="Ej. Excavación">
+                </div>
+                <div>
+                    <label data-i18n="duration">Duración</label>
+                    <input type="number" id="duracion" min="1" placeholder="5">
+                </div>
+                <div>
+                    <label data-i18n="budget">Presupuesto Parcial (BAC actividad)</label>
+                    <input type="number" id="presupuesto" min="0" step="0.01" placeholder="1000">
+                </div>
+                <div>
+                    <label data-i18n="predecessors">Predecesoras (Ctrl + Click)</label>
+                    <select id="dependencia" multiple size="5"></select>
+                    <small class="hint" data-i18n="predecessorsHint">Ctrl para varias</small>
+                </div>
+            </div>
+            <div class="acciones-grupo no-print">
+                <button onclick="agregarActividad()" data-i18n="addActivity">+ Agregar Actividad</button>
+                <button class="btn-peligro" onclick="eliminarTodasActividades()" data-i18n="deleteAll">Eliminar todas</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="scheduleTitle">Cronograma del Proyecto</h2>
+            <div class="table-wrapper">
                 <table>
                     <thead>
                         <tr>
-                            <th>Letra</th>
-                            <th>Actividad</th>
-                            <th>Duración</th>
-                            <th>Predecesoras</th>
-                            <th>ES</th>
-                            <th>EF</th>
-                            <th>LS</th>
-                            <th>LF</th>
-                            <th>Holgura</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
+                            <th>ID</th>
+                            <th data-i18n="colActivity">Actividad</th>
+                            <th data-i18n="colDuration">Duración</th>
+                            <th data-i18n="colBudget">Presupuesto</th>
+                            <th data-i18n="colPredecessors">Predecesoras</th>
+                            <th data-i18n="colStartDate">Fecha Inicio</th>
+                            <th data-i18n="colEndDate">Fecha Fin</th>
+                            <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
+                            <th data-i18n="colSlack">Holgura</th>
+                            <th data-i18n="colStatus">Estado</th>
+                            <th data-i18n="colPctTotal">% Total</th>
+                            <th data-i18n="colActions">Acc.</th>
                         </tr>
                     </thead>
                     <tbody id="tablaActividades"></tbody>
                 </table>
-            </section>
+            </div>
+        </section>
 
-            <section class="card">
-                <h2>Diagrama de Gantt</h2>
-                <div id="ganttContainer" style="overflow-x: auto; border: 1px solid #ddd; padding: 10px; background: #fafafa; min-height: 350px;"></div>
-            </section>
+        <section class="card">
+            <h2 data-i18n="ganttTitle">Diagrama de Gantt</h2>
+            <p class="subtitle" id="ganttHintText" data-i18n="ganttHintPlanned">Modo planificado: los % deben sumar 100% por actividad.</p>
+            <div class="leyenda-gantt">
+                <div class="leyenda-item"><span class="cuadro-azul"></span> <span data-i18n="legendWork">Trabajo</span></div>
+                <div class="leyenda-item"><span class="cuadro-celeste"></span> <span data-i18n="legendSlack">Holgura</span></div>
+                <div class="leyenda-item"><span class="cuadro-critico"></span> <span data-i18n="legendCritical">Ruta crítica</span></div>
+                <div class="leyenda-item"><span class="cuadro-nolab"></span> <span data-i18n="legendNonWork">No laborable</span></div>
+            </div>
+            <div id="ganttContainer" class="gantt-container"></div>
+        </section>
 
-            <section class="card">
-                <h2>Ruta Crítica</h2>
-                <div id="rutaCritica" style="padding: 20px; background: #f0f0f0; border-radius: 8px; font-size: 1.1rem;">
-                    Agrega actividades y predecesoras para calcular la ruta crítica...
-                </div>
-            </section>
+        <section class="card">
+            <h2 data-i18n="criticalPath">Ruta Crítica</h2>
+            <div id="rutaCritica" class="ruta-critica-box" data-i18n="criticalPathEmpty">Agrega actividades...</div>
+        </section>
 
-            <section class="card exportacion">
-                <button onclick="exportarCSV()">📥 Exportar CSV</button>
-            </section>
-
-        </div>
-
-        <!-- ==================== TAB 1: EVM ==================== -->
-        <div id="tab1" class="tab-content" style="display: none;">
-            <section class="card">
-                <h2>Análisis de Valor Ganado (EVM)</h2>
-                <div class="grid">
-                    <div>
-                        <label>Planned Value (PV)</label>
-                        <input type="number" id="pv" value="150000" oninput="calcularEVM()">
-                    </div>
-                    <div>
-                        <label>Earned Value (EV)</label>
-                        <input type="number" id="ev" value="120000" oninput="calcularEVM()">
-                    </div>
-                    <div>
-                        <label>Actual Cost (AC)</label>
-                        <input type="number" id="ac" value="135000" oninput="calcularEVM()">
-                    </div>
-                </div>
-
-                <div class="resultados-evm">
-                    <h3>Indicadores</h3>
-                    <p><strong>CPI:</strong> <span id="cpi">0.00</span></p>
-                    <p><strong>SPI:</strong> <span id="spi">0.00</span></p>
-                    <p><strong>CV (Costo):</strong> S/. <span id="cv">0</span></p>
-                    <p><strong>SV (Plazo):</strong> S/. <span id="sv">0</span></p>
-                </div>
-            </section>
-        </div>
-
+        <section class="card exportacion no-print">
+            <div class="acciones-exportar">
+                <button onclick="exportarExcelCompleto()" data-i18n="exportExcelFull">Exportar Excel Completo</button>
+                <button onclick="exportarExcelCronograma()" data-i18n="exportExcel">Exportar Excel Cronograma</button>
+                <button onclick="guardarPDF(0)" data-i18n="savePDF">Guardar PDF</button>
+                <button onclick="guardarPDFProfesional('cronograma')" data-i18n="savePDFPro">PDF Profesional</button>
+                <button onclick="imprimirSeccion(0)" data-i18n="print">Imprimir</button>
+            </div>
+        </section>
     </div>
 
-    <script src="script.js"></script>
+    <!-- TAB 1 -->
+    <div id="tab1" class="tab-content" style="display:none;">
 
-    <script>
-        function openTab(n) {
-            document.getElementById('tab0').style.display = n === 0 ? 'block' : 'none';
-            document.getElementById('tab1').style.display = n === 1 ? 'block' : 'none';
-            
-            document.querySelectorAll('.tab').forEach((tab, index) => {
-                tab.classList.toggle('active', index === n);
-            });
-        }
+        <section class="card">
+            <h2 data-i18n="evmTable">Seguimiento EVM por Periodo</h2>
+            <p class="subtitle" data-i18n="evmTableHint">Ingrese Avance % y Costo Incurrido Parcial. Ppto Parcial y Trabajo Realizado se calculan solos.</p>
 
-        window.onload = () => {
-            openTab(0);
-        };
-    </script>
+            <div class="grid grid-2">
+                <div>
+                    <label data-i18n="cutoffLabel">Analizar hasta (periodo de corte)</label>
+                    <select id="diaCorte" onchange="onCorteChange()"></select>
+                </div>
+            </div>
+
+            <div id="evmSinActividades" class="mensaje-vacio" style="display:none;" data-i18n="evmNeedActivities"></div>
+
+            <div class="resumen-evm">
+                <div class="kpi"><span>BAC</span><strong id="bacTotal">0</strong></div>
+                <div class="kpi"><span>PV</span><strong id="pvCorte">0</strong></div>
+                <div class="kpi"><span>EV</span><strong id="evCorte">0</strong></div>
+                <div class="kpi"><span>AC</span><strong id="acCorte">0</strong></div>
+            </div>
+
+            <div class="table-wrapper" id="wrapperTablaEVM">
+                <table>
+                    <thead>
+                        <tr>
+                            <th data-i18n="colTime">Tiempo</th>
+                            <th data-i18n="colAdvance">Avance %</th>
+                            <th data-i18n="colPptoParcial">Ppto Parcial (PV)</th>
+                            <th data-i18n="colPptoAcum">PV Acumulado</th>
+                            <th data-i18n="colCostoParcial">Costo Incurrido Parcial (AC)</th>
+                            <th data-i18n="colCostoAcum">AC Acumulado</th>
+                            <th data-i18n="colTrabajoParcial">Trabajo Realizado Parcial (EV)</th>
+                            <th data-i18n="colTrabajoAcum">EV Acumulado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyEVMPeriodos"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="sCurve">Curva S</h2>
+            <p class="subtitle" data-i18n="sCurveHint">PV muestra el plan completo. EV y AC se grafican solo hasta el periodo de corte seleccionado.</p>
+            <canvas id="curvaS" height="110"></canvas>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="evmIndicators">Indicadores al Periodo de Corte</h2>
+            <div class="resultados-evm">
+                <p><strong>SPI</strong> = EV/PV: <span id="spi">0.00</span></p>
+                <p><strong>CPI</strong> = EV/AC: <span id="cpi">0.00</span></p>
+                <p><strong>SV</strong> = EV - PV: <span id="sv">0</span></p>
+                <p><strong>CV</strong> = EV - AC: <span id="cv">0</span></p>
+                <p><strong>TCPI</strong> (BAC): <span id="tcpiBac">0.00</span></p>
+                <p><strong>TCPI</strong> (EAC): <span id="tcpiEac">0.00</span></p>
+                <p><strong data-i18n="scheduleAdvancePct">Adelanto cronograma</strong>: <span id="pctAdelanto">0%</span></p>
+                <p><strong data-i18n="costOverrunPct">Sobrecosto</strong>: <span id="pctSobrecosto">0%</span></p>
+            </div>
+            <div id="interpretacionIndicadoresExtra" class="analisis-contenido" style="margin-top:12px;"></div>
+        </section>
+
+        <section class="card analisis-card">
+            <h2 data-i18n="analysisSchedule">Análisis de Cronograma</h2>
+            <div id="analisisCronograma" class="analisis-contenido"></div>
+        </section>
+
+        <section class="card analisis-card">
+            <h2 data-i18n="analysisCost">Análisis de Costo</h2>
+            <div id="analisisCosto" class="analisis-contenido"></div>
+        </section>
+
+        <section class="card analisis-card">
+            <h2 data-i18n="analysisProjections">Proyecciones (ETC / EAC)</h2>
+            <div class="grid grid-2" style="margin-bottom: 16px;">
+                <div>
+                    <label data-i18n="etcScenarioLabel">Escenario ETC a utilizar</label>
+                    <select id="escenarioETC" onchange="onEscenarioETCChange()">
+                        <option value="atipico" data-i18n="etcAtypical">Atípico (BAC - EV)</option>
+                        <option value="tipico" data-i18n="etcTypical">Típico (BAC - EV) / CPI</option>
+                        <option value="probable" data-i18n="etcProbable" selected>Más probable (BAC - EV) / (CPI × SPI)</option>
+                    </select>
+                </div>
+            </div>
+            <div id="analisisProyecciones" class="analisis-contenido"></div>
+            <h3 class="subtitulo-grafica" data-i18n="scenarioComparison">Comparación de Escenarios</h3>
+            <canvas id="graficaEscenarios" height="120"></canvas>
+        </section>
+
+        <section class="card exportacion no-print">
+            <div class="acciones-exportar">
+                <button onclick="exportarExcelCompleto()" data-i18n="exportExcelFull">Exportar Excel Completo</button>
+                <button onclick="exportarExcelEVM()" data-i18n="exportExcel">Exportar Excel EVM</button>
+                <button onclick="guardarPDF(1)" data-i18n="savePDF">Guardar PDF</button>
+                <button onclick="guardarPDFProfesional('evm')" data-i18n="savePDFPro">PDF Profesional</button>
+                <button onclick="imprimirSeccion(1)" data-i18n="print">Imprimir</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- TAB 2 - Informe Ejecutivo -->
+    <div id="tab2" class="tab-content" style="display:none;">
+        <section class="card informe-ejecutivo">
+            <div class="informe-header no-print">
+                <h2 data-i18n="executiveReport">Informe Ejecutivo</h2>
+                <div class="acciones-exportar">
+                    <button onclick="generarInformeEjecutivo()" data-i18n="refreshReport">Actualizar Informe</button>
+                    <button onclick="guardarPDFProfesional('informe')" data-i18n="exportReportPDF">Exportar Informe PDF</button>
+                    <button onclick="imprimirSeccion(2)" data-i18n="print">Imprimir</button>
+                </div>
+            </div>
+            <div id="contenidoInformeEjecutivo" class="informe-contenido"></div>
+        </section>
+    </div>
+
+    <!-- TAB 3 - Bitácora -->
+    <div id="tab3" class="tab-content" style="display:none;">
+        <section class="card">
+            <h2 data-i18n="tabLog">Bitácora del Proyecto</h2>
+            <p class="subtitle" data-i18n="logHint">Editor enriquecido con guardado automático.</p>
+            <div id="bitacoraToolbar" class="bitacora-toolbar no-print"></div>
+            <div id="bitacoraEditor" class="bitacora-editor" contenteditable="true"></div>
+            <div class="acciones-exportar no-print" style="margin-top:14px;">
+                <button onclick="exportarBitacoraTXT()" data-i18n="exportLogTxt">Exportar TXT</button>
+                <button onclick="exportarBitacoraPDF()" data-i18n="exportLogPdf">Exportar PDF</button>
+                <button onclick="exportarBitacoraWord()" data-i18n="exportLogWord">Exportar Word</button>
+            </div>
+        </section>
+    </div>
+</div>
+
+<!-- Modal Editar Actividad -->
+<div id="modalEditar" class="modal-overlay no-print" style="display:none;">
+    <div class="modal-card">
+        <h3 data-i18n="editActivity">Editar Actividad</h3>
+        <input type="hidden" id="editActId">
+        <div class="grid">
+            <div>
+                <label data-i18n="activityName">Nombre de la Actividad</label>
+                <input type="text" id="editNombre">
+            </div>
+            <div>
+                <label data-i18n="duration">Duración</label>
+                <input type="number" id="editDuracion" min="1">
+            </div>
+            <div>
+                <label data-i18n="budget">Presupuesto Parcial (BAC actividad)</label>
+                <input type="number" id="editPresupuesto" min="0" step="0.01">
+            </div>
+            <div>
+                <label data-i18n="predecessors">Predecesoras</label>
+                <select id="editPredecesoras" multiple size="5"></select>
+            </div>
+        </div>
+        <div class="acciones-grupo" style="margin-top:16px;">
+            <button onclick="guardarEdicionActividad()" data-i18n="saveChanges">Guardar cambios</button>
+            <button class="btn-secundario" onclick="cerrarModalEditar()" data-i18n="cancel">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Bitácora (mismo contenido que tab 3) -->
+<div id="modalBitacora" class="modal-overlay modal-bitacora no-print" style="display:none;">
+    <div class="modal-card modal-card-grande">
+        <div class="modal-bitacora-header">
+            <h3 data-i18n="tabLog">Bitácora del Proyecto</h3>
+            <button class="btn-cerrar" onclick="cerrarBitacoraModal()">✕</button>
+        </div>
+        <div id="bitacoraToolbarModal" class="bitacora-toolbar"></div>
+        <div id="bitacoraEditorModal" class="bitacora-editor" contenteditable="true"></div>
+        <div class="acciones-exportar" style="margin-top:14px;">
+            <button onclick="exportarBitacoraTXT()" data-i18n="exportLogTxt">Exportar TXT</button>
+            <button onclick="exportarBitacoraPDF()" data-i18n="exportLogPdf">Exportar PDF</button>
+            <button onclick="exportarBitacoraWord()" data-i18n="exportLogWord">Exportar Word</button>
+        </div>
+    </div>
+</div>
+
+<button id="fabBitacora" class="fab-bitacora no-print" onclick="abrirBitacora()" title="Bitácora">📝</button>
+
+<script src="data-peru.js"></script>
+<script src="script.js"></script>
 </body>
-</html>
+</html>    
