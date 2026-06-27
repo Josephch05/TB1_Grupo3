@@ -75,7 +75,7 @@
                 <div class="toggle-row">
                     <label class="toggle-label">
                         <input type="checkbox" id="holguraPorcentaje">
-                        <span data-i18n="slackPctToggle">Mostrar holgura en %</span>
+                        <span data-i18n="slackAsPercent">Mostrar holgura en %</span>
                     </label>
                 </div>
             </div>
@@ -205,10 +205,8 @@
 
         <section class="card exportacion no-print">
             <div class="acciones-exportar">
-                <button onclick="exportarExcelCompleto()" data-i18n="exportExcelFull">Exportar Excel Completo</button>
-                <button onclick="exportarExcelCronograma()" data-i18n="exportExcel">Exportar Excel Cronograma</button>
-                <button onclick="guardarPDF(0)" data-i18n="savePDF">Guardar PDF</button>
-                <button onclick="guardarPDFProfesional('cronograma')" data-i18n="savePDFPro">PDF Profesional</button>
+                <button onclick="exportarExcelCompleto()" data-i18n="exportExcelFull">Exportar Excel</button>
+                <button onclick="guardarPDFProfesional('cronograma')" data-i18n="savePDFPro">Guardar PDF</button>
                 <button onclick="imprimirSeccion(0)" data-i18n="print">Imprimir</button>
             </div>
         </section>
@@ -271,10 +269,7 @@
                 <p><strong>CV</strong> = EV - AC: <span id="cv">0</span></p>
                 <p><strong>TCPI</strong> (BAC): <span id="tcpiBac">0.00</span></p>
                 <p><strong>TCPI</strong> (EAC): <span id="tcpiEac">0.00</span></p>
-                <p><strong data-i18n="scheduleAdvancePct">Adelanto cronograma</strong>: <span id="pctAdelanto">0%</span></p>
-                <p><strong data-i18n="costOverrunPct">Sobrecosto</strong>: <span id="pctSobrecosto">0%</span></p>
             </div>
-            <div id="interpretacionIndicadoresExtra" class="analisis-contenido" style="margin-top:12px;"></div>
         </section>
 
         <section class="card analisis-card">
@@ -306,10 +301,8 @@
 
         <section class="card exportacion no-print">
             <div class="acciones-exportar">
-                <button onclick="exportarExcelCompleto()" data-i18n="exportExcelFull">Exportar Excel Completo</button>
-                <button onclick="exportarExcelEVM()" data-i18n="exportExcel">Exportar Excel EVM</button>
-                <button onclick="guardarPDF(1)" data-i18n="savePDF">Guardar PDF</button>
-                <button onclick="guardarPDFProfesional('evm')" data-i18n="savePDFPro">PDF Profesional</button>
+                <button onclick="exportarExcelCompleto()" data-i18n="exportExcelFull">Exportar Excel</button>
+                <button onclick="guardarPDFProfesional('evm')" data-i18n="savePDFPro">Guardar PDF</button>
                 <button onclick="imprimirSeccion(1)" data-i18n="print">Imprimir</button>
             </div>
         </section>
@@ -322,7 +315,7 @@
                 <h2 data-i18n="executiveReport">Informe Ejecutivo</h2>
                 <div class="acciones-exportar">
                     <button onclick="generarInformeEjecutivo()" data-i18n="refreshReport">Actualizar Informe</button>
-                    <button onclick="guardarPDFProfesional('informe')" data-i18n="exportReportPDF">Exportar Informe PDF</button>
+                    <button onclick="guardarPDFProfesional('informe')" data-i18n="savePDFPro">Guardar PDF</button>
                     <button onclick="imprimirSeccion(2)" data-i18n="print">Imprimir</button>
                 </div>
             </div>
