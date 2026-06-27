@@ -14,6 +14,7 @@ let sumaAcumulada = [];
 let diaCorte = 1;
 let escenarioETC = 'probable';
 let holguraPorcentaje = false;
+let trabajarEnHolgura = false;
 let calendarioActivo = false;
 let diasLaborables = [1, 2, 3, 4, 5];
 let feriadosCache = [];
@@ -46,7 +47,10 @@ const traducciones = {
         language: 'Idioma', currency: 'Moneda',
         activityRegister: 'Registro de Actividades', activityName: 'Nombre de la Actividad',
         duration: 'Duración', budget: 'Presupuesto Parcial (BAC actividad)',
-        predecessors: 'Predecesoras (Ctrl + Click)', predecessorsHint: 'Ctrl para varias',
+        predecessors: 'Predecesoras', predecessorsHint: 'FC, CC, FF o CF. Ej: 1, 2CC+1, 3FF+2. Por defecto FC.',
+        workInSlack: 'Trabajar en holgura (% distribuido en trabajo + holgura)',
+        workInSlackHint: 'Sin check: 100% solo en días de trabajo (ej. 5 días = 20% c/u). Con check: 100% en trabajo + holgura (ej. 10 días = 10% c/u).',
+        saveChanges: 'Guardar cambios',
         addActivity: '+ Agregar Actividad', deleteAll: 'Eliminar todas',
         scheduleTitle: 'Cronograma del Proyecto',
         colActivity: 'Actividad', colDuration: 'Duración', colBudget: 'Presupuesto',
@@ -144,7 +148,10 @@ const traducciones = {
         language: 'Language', currency: 'Currency',
         activityRegister: 'Activity Register', activityName: 'Activity Name',
         duration: 'Duration', budget: 'Partial Budget (activity BAC)',
-        predecessors: 'Predecessors (Ctrl + Click)', predecessorsHint: 'Ctrl for multiple',
+        predecessors: 'Predecessors', predecessorsHint: 'FC, CC, FF or CF. E.g. 1, 2SS+1. Default FC.',
+        workInSlack: 'Work in slack (% split across work + slack days)',
+        workInSlackHint: 'Unchecked: 100% on work days only (e.g. 5 days = 20% each). Checked: 100% on work + slack (e.g. 10 days = 10% each).',
+        saveChanges: 'Save changes',
         addActivity: '+ Add Activity', deleteAll: 'Delete all',
         scheduleTitle: 'Project Schedule',
         colActivity: 'Activity', colDuration: 'Duration', colBudget: 'Budget',
@@ -231,6 +238,87 @@ const traducciones = {
 };
 
 function t(k) { return traducciones[idioma][k] || k; }
+
+const TIPOS_PREdecesora = ['FC', 'CC', 'FF', 'CF'];
+
+function normalizarPredecesoras(act) {
+    if (!act.predecesoras?.length) { act.predecesoras = []; return; }
+    if (typeof act.predecesoras[0] === 'object' && act.predecesoras[0]?.id != null) return;
+    act.predecesoras = act.predecesoras.map(p => ({ id: p, tipo: 'FC', lag: 0 }));
+}
+
+function normalizarTodasPredecesoras() {
+    actividades.forEach(normalizarPredecesoras);
+}
+
+function parsePredecesorasTexto(texto) {
+    if (!texto?.trim()) return [];
+    return texto.split(/[,;]+/).map(p => p.trim()).filter(Boolean).map(parte => {
+        const m = parte.match(/^(\d+)\s*(FC|CC|FF|CF)?\s*([+-]\d+)?$/i);
+        if (!m) return null;
+        return {
+            id: parseInt(m[1]),
+            tipo: (m[2] || 'FC').toUpperCase(),
+            lag: m[3] ? parseInt(m[3]) : 0
+        };
+    }).filter(Boolean);
+}
+
+function formatearPredecesoras(deps) {
+    if (!deps?.length) return '-';
+    return deps.map(d => {
+        const tipo = d.tipo || 'FC';
+        const lag = d.lag || 0;
+        if (tipo === 'FC' && lag === 0) return `${d.id}`;
+        if (tipo === 'FC' && lag !== 0) return `${d.id}${lag > 0 ? '+' + lag : lag}`;
+        let s = `${d.id}${tipo}`;
+        if (lag > 0) s += `+${lag}`;
+        else if (lag < 0) s += lag;
+        return s;
+    }).join(', ');
+}
+
+function getPredecesorasIds(act) {
+    normalizarPredecesoras(act);
+    return (act.predecesoras || []).map(p => p.id);
+}
+
+function calcularESDesdePredecesora(act, link, predsMap) {
+    const p = predsMap[link.id];
+    if (!p) return 0;
+    const lag = link.lag || 0;
+    switch (link.tipo) {
+        case 'CC': return p.ES + lag;
+        case 'FF': return p.EF + lag - act.duracion;
+        case 'CF': return p.ES + lag - act.duracion;
+        default: return p.EF + lag;
+    }
+}
+
+function calcularLFDesdeSucesor(act, link, suc) {
+    const lag = link.lag || 0;
+    switch (link.tipo) {
+        case 'CC': return suc.LS - lag + act.duracion;
+        case 'FF': return suc.LF - lag;
+        case 'CF': return suc.LF - lag + act.duracion;
+        default: return suc.LS - lag;
+    }
+}
+
+function getPeriodosHolgura(act) {
+    const p = [];
+    if (act.LS > act.ES) for (let i = act.ES; i < act.LS; i++) p.push(i);
+    if (act.LF > act.EF) for (let i = act.EF; i < act.LF; i++) p.push(i);
+    return p;
+}
+
+function getPeriodosDistribucion(act) {
+    const trabajo = [];
+    for (let i = act.ES; i < act.EF; i++) trabajo.push(i);
+    if (!trabajarEnHolgura) return trabajo;
+    const holgura = getPeriodosHolgura(act).filter(i => !trabajo.includes(i));
+    return [...trabajo, ...holgura];
+}
 
 function getUnidadLabel() {
     return { es: { dias: 'días', semanas: 'semanas', meses: 'meses' }, en: { dias: 'days', semanas: 'weeks', meses: 'months' } }[idioma][unidadTiempo];
@@ -479,9 +567,10 @@ function validarProyecto() {
     if (!projectStartDate) errores.push(t('valNoStartDate'));
     if (!actividades.length) advertencias.push(t('valNoActivities'));
     actividades.forEach(a => {
+        normalizarPredecesoras(a);
         (a.predecesoras || []).forEach(p => {
-            if (!actividades.find(x => x.id === p)) errores.push(`${t('valInvalidPred')} ${a.id}: ${p}`);
-            if (p === a.id) errores.push(`${t('valInvalidPred')} ${a.id}: ${p}`);
+            if (!actividades.find(x => x.id === p.id)) errores.push(`${t('valInvalidPred')} ${a.id}: ${p.id}`);
+            if (p.id === a.id) errores.push(`${t('valInvalidPred')} ${a.id}: ${p.id}`);
         });
         if (modoAvance === 'planeado' && a.duracion > 0) {
             const sum = getSumaPorcentajes(a);
@@ -502,7 +591,7 @@ function detectarCiclos() {
         visitado.add(id);
         enPila.add(id);
         const act = actividades.find(a => a.id === id);
-        if (act?.predecesoras?.some(p => dfs(p))) return true;
+        if (act?.predecesoras?.some(p => dfs(p.id ?? p))) return true;
         enPila.delete(id);
         return false;
     }
@@ -538,19 +627,13 @@ function mostrarValidaciones() {
 function abrirModalEditar(id) {
     const act = actividades.find(a => a.id === id);
     if (!act) return;
+    normalizarPredecesoras(act);
     document.getElementById('editActId').value = id;
     document.getElementById('editNombre').value = act.nombre;
     document.getElementById('editDuracion').value = act.duracion;
     document.getElementById('editPresupuesto').value = act.presupuesto;
-    const sel = document.getElementById('editPredecesoras');
-    sel.innerHTML = '';
-    actividades.filter(a => a.id !== id).forEach(a => {
-        const o = document.createElement('option');
-        o.value = a.id;
-        o.textContent = `${a.id} - ${a.nombre}`;
-        o.selected = (act.predecesoras || []).includes(a.id);
-        sel.appendChild(o);
-    });
+    document.getElementById('editPredecesoras').value = act.predecesoras?.length
+        ? formatearPredecesoras(act.predecesoras).replace(/^-$/, '') : '';
     document.getElementById('modalEditar').classList.add('activo');
 }
 
@@ -562,13 +645,19 @@ function guardarEdicionActividad() {
     const id = parseInt(document.getElementById('editActId').value);
     const act = actividades.find(a => a.id === id);
     if (!act) return;
-    act.nombre = document.getElementById('editNombre').value.trim();
-    act.duracion = parseInt(document.getElementById('editDuracion').value) || act.duracion;
+    const nombre = document.getElementById('editNombre').value.trim();
+    const duracion = parseInt(document.getElementById('editDuracion').value);
+    if (!nombre || !duracion) {
+        alert(t('alertFillFields'));
+        return;
+    }
+    act.nombre = nombre;
+    act.duracion = duracion;
     act.presupuesto = parseFloat(document.getElementById('editPresupuesto').value) || 0;
-    act.predecesoras = Array.from(document.getElementById('editPredecesoras').selectedOptions).map(o => parseInt(o.value));
+    act.predecesoras = parsePredecesorasTexto(document.getElementById('editPredecesoras').value);
     act.porcentajes = {};
+    act.porcentajesHolgura = {};
     cerrarModalEditar();
-    actualizarSelectDependencias();
     calcularTodo();
 }
 
@@ -579,7 +668,7 @@ function getEstadoProyecto() {
         projectStartDate: projectStartDate ? projectStartDate.toISOString().slice(0, 10) : null,
         nombreProyecto: document.getElementById('nombreProyecto')?.value || '',
         unidadTiempo, modoAvance, idioma, moneda, periodosEVM, diaCorte, escenarioETC,
-        holguraPorcentaje, calendarioActivo, diasLaborables,
+        holguraPorcentaje, trabajarEnHolgura, calendarioActivo, diasLaborables,
         diasNoLaborablesCustom, bitacoraNotas, bitacoraNotaActiva, bitacoraSiguienteId
     };
 }
@@ -587,6 +676,7 @@ function getEstadoProyecto() {
 function aplicarEstadoProyecto(estado) {
     if (!estado) return;
     actividades = estado.actividades || [];
+    normalizarTodasPredecesoras();
     projectStartDate = estado.projectStartDate ? new Date(estado.projectStartDate + 'T00:00:00') : null;
     if (document.getElementById('nombreProyecto')) document.getElementById('nombreProyecto').value = estado.nombreProyecto || '';
     if (document.getElementById('fechaInicioProyecto')) document.getElementById('fechaInicioProyecto').value = estado.projectStartDate || '';
@@ -598,6 +688,7 @@ function aplicarEstadoProyecto(estado) {
     diaCorte = estado.diaCorte || 1;
     escenarioETC = estado.escenarioETC || 'probable';
     holguraPorcentaje = !!estado.holguraPorcentaje;
+    trabajarEnHolgura = !!estado.trabajarEnHolgura;
     calendarioActivo = !!estado.calendarioActivo;
     diasLaborables = estado.diasLaborables || [1, 2, 3, 4, 5];
     diasNoLaborablesCustom = estado.diasNoLaborablesCustom || [];
@@ -617,6 +708,8 @@ function aplicarEstadoProyecto(estado) {
     document.getElementById('escenarioETC').value = escenarioETC;
     const holgEl = document.getElementById('holguraPorcentaje');
     if (holgEl) holgEl.checked = holguraPorcentaje;
+    const trabHolgEl = document.getElementById('trabajarEnHolgura');
+    if (trabHolgEl) trabHolgEl.checked = trabajarEnHolgura;
     const calEl = document.getElementById('calendarioActivo');
     if (calEl) { calEl.checked = calendarioActivo; togglePanelCalendario(); }
     document.querySelectorAll('.dia-lab').forEach(cb => {
@@ -625,7 +718,6 @@ function aplicarEstadoProyecto(estado) {
     actualizarFeriados(true);
     renderBitacoraTabs();
     sincronizarBitacoraUI();
-    actualizarSelectDependencias();
     cambiarIdioma();
     calcularTodo();
 }
@@ -675,7 +767,7 @@ function cargarProyectoEjemplo() {
             { id: 5, nombre: idioma === 'es' ? 'Acabados' : 'Finishes', duracion: 10, presupuesto: 35000, predecesoras: [4], porcentajes: {}, ES: 0, EF: 0, LS: 0, LF: 0, holgura: 0, esCritica: false }
         ],
         periodosEVM: [], diaCorte: 1, escenarioETC: 'probable',
-        holguraPorcentaje: false, calendarioActivo: false,
+        holguraPorcentaje: false, trabajarEnHolgura: false, calendarioActivo: false,
         diasLaborables: [1, 2, 3, 4, 5],
         diasNoLaborablesCustom: [],
         bitacoraNotas: [{ id: 1, titulo: 'Nota 1', html: '' }],
@@ -730,6 +822,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const holgEl = document.getElementById('holguraPorcentaje');
     if (holgEl) holgEl.addEventListener('change', e => { holguraPorcentaje = e.target.checked; renderTabla(); renderGantt(); });
+    const trabHolgEl = document.getElementById('trabajarEnHolgura');
+    if (trabHolgEl) trabHolgEl.addEventListener('change', e => {
+        trabajarEnHolgura = e.target.checked;
+        actividades.forEach(a => { a.porcentajes = {}; a.porcentajesHolgura = {}; });
+        calcularTodo();
+    });
     const calEl = document.getElementById('calendarioActivo');
     if (calEl) calEl.addEventListener('change', e => { calendarioActivo = e.target.checked; togglePanelCalendario(); calcularTodo(); });
     document.getElementById('departamentosFeriados')?.addEventListener('change', () => { actualizarFeriados(true); calcularTodo(); });
@@ -844,21 +942,25 @@ function getDatosCorte() {
 
 function distribuirPorcentajesIgual(act) {
     act.porcentajes = {};
-    const n = act.duracion;
+    const periodos = getPeriodosDistribucion(act);
+    const n = periodos.length;
     if (n <= 0) return;
-    const base = Math.floor(100 / n);
-    let resto = 100 - base * n;
-    for (let i = act.ES; i < act.EF; i++) {
-        act.porcentajes[i] = base + (resto > 0 ? 1 : 0);
-        if (resto > 0) resto--;
-    }
+    const pctPorDia = 100 / n;
+    const base = Math.floor(pctPorDia * 100) / 100;
+    let asignado = 0;
+    periodos.forEach((i, idx) => {
+        const pct = idx === periodos.length - 1 ? Math.round((100 - asignado) * 100) / 100 : base;
+        act.porcentajes[i] = pct;
+        asignado += pct;
+    });
+    if (!trabajarEnHolgura) act.porcentajesHolgura = {};
 }
 
 function agregarActividad() {
     const nombre = document.getElementById('actividad').value.trim();
     const duracion = parseInt(document.getElementById('duracion').value);
     const presupuesto = parseFloat(document.getElementById('presupuesto').value) || 0;
-    const predecesoras = Array.from(document.getElementById('dependencia').selectedOptions).map(o => parseInt(o.value));
+    const predecesoras = parsePredecesorasTexto(document.getElementById('dependencia').value);
     if (!nombre || !duracion || !projectStartDate) {
         alert(t('alertFillFields'));
         return;
@@ -881,26 +983,20 @@ function agregarActividad() {
     document.getElementById('actividad').value = '';
     document.getElementById('duracion').value = '';
     document.getElementById('presupuesto').value = '';
-    actualizarSelectDependencias();
+    document.getElementById('dependencia').value = '';
     calcularTodo();
 }
 
 function actualizarSelectDependencias() {
-    const sel = document.getElementById('dependencia');
-    sel.innerHTML = '';
-    actividades.forEach(a => {
-        const o = document.createElement('option');
-        o.value = a.id;
-        o.textContent = `${a.id} - ${a.nombre}`;
-        sel.appendChild(o);
-    });
+    /* predecesoras ahora se ingresan como texto FC/CC/FF/CF */
 }
 
 function eliminarActividad(id) {
     if (!confirm(t('confirmDeleteOne'))) return;
     actividades = actividades.filter(a => a.id !== id);
     actividades.forEach(a => {
-        a.predecesoras = (a.predecesoras || []).filter(p => p !== id);
+        normalizarPredecesoras(a);
+        a.predecesoras = (a.predecesoras || []).filter(p => (p.id ?? p) !== id);
     });
     actualizarSelectDependencias();
     calcularTodo();
@@ -939,16 +1035,19 @@ function actualizarPorcentajeHolgura(actId, periodo, val) {
 
 function getSumaPorcentajes(act) {
     let s = 0;
-    for (let i = act.ES; i < act.EF; i++) s += parseFloat(act.porcentajes[i]) || 0;
+    getPeriodosDistribucion(act).forEach(i => { s += parseFloat(act.porcentajes[i]) || 0; });
     return s;
 }
 
 function getValorCelda(act, periodo) {
-    if (periodo < act.ES || periodo >= act.EF) return 0;
+    const enTrabajo = periodo >= act.ES && periodo < act.EF;
+    const enHolguraTrabajo = trabajarEnHolgura && esCeldaHolgura(periodo, act);
+    if (!enTrabajo && !enHolguraTrabajo) return 0;
     const pct = parseFloat(act.porcentajes[periodo]) || 0;
     const pres = parseFloat(act.presupuesto) || 0;
     if (modoAvance === 'planeado') return pres * (pct / 100);
-    return getPVPeriodo(act, periodo);
+    if (enTrabajo) return getPVPeriodo(act, periodo);
+    return 0;
 }
 
 function calcularAvancePeriodoDesdeGantt(periodo) {
@@ -1008,14 +1107,18 @@ function calcularTodo() {
 }
 
 function calcularForwardPass() {
+    normalizarTodasPredecesoras();
     let c = true, g = 0;
     while (c && g++ < 100) {
         c = false;
+        const predsMap = Object.fromEntries(actividades.map(a => [a.id, a]));
         actividades.forEach(act => {
             let ES = 0;
             if (act.predecesoras?.length) {
-                const preds = actividades.filter(a => act.predecesoras.includes(a.id));
-                if (preds.length === act.predecesoras.length) ES = Math.max(...preds.map(p => p.EF));
+                const vals = act.predecesoras
+                    .filter(link => predsMap[link.id])
+                    .map(link => calcularESDesdePredecesora(act, link, predsMap));
+                if (vals.length === act.predecesoras.length) ES = Math.max(...vals, 0);
             }
             const EF = ES + act.duracion;
             if (act.ES !== ES || act.EF !== EF) {
@@ -1038,9 +1141,17 @@ function calcularBackwardPass() {
         c = false;
         for (let i = actividades.length - 1; i >= 0; i--) {
             const act = actividades[i];
-            const suc = actividades.filter(s => s.predecesoras?.includes(act.id));
+            const sucLinks = [];
+            actividades.forEach(s => {
+                normalizarPredecesoras(s);
+                (s.predecesoras || []).forEach(link => {
+                    if (link.id === act.id) sucLinks.push({ suc: s, link });
+                });
+            });
             let LF = total;
-            if (suc.length) LF = Math.min(...suc.map(s => s.LS));
+            if (sucLinks.length) {
+                LF = Math.min(...sucLinks.map(({ suc, link }) => calcularLFDesdeSucesor(act, link, suc)));
+            }
             const LS = LF - act.duracion;
             if (act.LF !== LF || act.LS !== LS) {
                 act.LF = LF;
@@ -1078,7 +1189,8 @@ function renderTabla() {
     tbody.innerHTML = '';
     const totalDur = Math.max(...actividades.map(a => a.EF), 0);
     actividades.forEach(act => {
-        const preds = act.predecesoras?.length ? act.predecesoras.join(', ') : '-';
+        normalizarPredecesoras(act);
+        const preds = formatearPredecesoras(act.predecesoras);
         const sumPct = getSumaPorcentajes(act);
         const pctOk = modoAvance === 'real' || Math.abs(sumPct - 100) < 0.01;
         let holguraTxt = act.holgura;
@@ -1171,12 +1283,22 @@ function renderGantt() {
                     ${modoAvance === 'planeado' && val > 0 ? `<small class="valor-celda">${val.toFixed(0)}</small>` : ''}
                 </td>`;
             } else if (periodo >= 0 && esCeldaHolgura(periodo, act)) {
-                if (!act.porcentajesHolgura) act.porcentajesHolgura = {};
-                const hp = act.porcentajesHolgura[periodo] ?? '';
-                html += `<td class="gantt-celda-holgura${clsExtra}">
-                    <input type="number" min="0" max="100" step="0.1" value="${hp}" class="input-pct"
-                        onchange="actualizarPorcentajeHolgura(${act.id}, ${periodo}, this.value)">
-                </td>`;
+                if (trabajarEnHolgura) {
+                    const pct = act.porcentajes[periodo] ?? '';
+                    const val = modoAvance === 'planeado' ? getValorCelda(act, periodo) : '';
+                    html += `<td class="gantt-celda-holgura gantt-celda-trabajo-holg${clsExtra}">
+                        <input type="number" min="0" max="100" step="0.1" value="${pct}" class="input-pct"
+                            onchange="actualizarPorcentaje(${act.id}, ${periodo}, this.value)">
+                        ${modoAvance === 'planeado' && val > 0 ? `<small class="valor-celda valor-celda-holg">${val.toFixed(0)}</small>` : ''}
+                    </td>`;
+                } else {
+                    if (!act.porcentajesHolgura) act.porcentajesHolgura = {};
+                    const hp = act.porcentajesHolgura[periodo] ?? '';
+                    html += `<td class="gantt-celda-holgura${clsExtra}">
+                        <input type="number" min="0" max="100" step="0.1" value="${hp}" class="input-pct"
+                            onchange="actualizarPorcentajeHolgura(${act.id}, ${periodo}, this.value)">
+                    </td>`;
+                }
             } else {
                 html += `<td class="gantt-celda-vacia${clsExtra}"></td>`;
             }
@@ -1728,7 +1850,7 @@ function exportarExcelCronograma() {
         Duracion: a.duracion,
         Unidad: getUnidadLabel(),
         Presupuesto: parseFloat(a.presupuesto) || 0,
-        Predecesoras: (a.predecesoras || []).join(';'),
+        Predecesoras: formatearPredecesoras(a.predecesoras),
         FechaInicio: getFechaInicioActividad(a),
         FechaFin: getFechaFinActividad(a),
         ES: a.ES,
@@ -1910,20 +2032,51 @@ function renombrarNotaBitacora(id) {
     }
 }
 
-function bitacoraAplicarFuente(fuente) {
+function bitacoraGuardarSeleccion() {
+    guardarNotaActivaDesdeEditor();
+    persistirBitacora();
+}
+
+function bitacoraWrapStyle(styleObj) {
     const editor = getBitacoraEditor();
     if (!editor) return;
     editor.focus();
     const sel = window.getSelection();
-    if (sel?.rangeCount && !sel.isCollapsed) {
-        const html = `<span style="font-family:${fuente}, sans-serif;">${sel.toString()}</span>`;
-        document.execCommand('insertHTML', false, html);
+    if (!sel?.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) {
+        const span = document.createElement('span');
+        Object.assign(span.style, styleObj);
+        span.appendChild(document.createTextNode('\u200B'));
+        range.insertNode(span);
+        range.setStart(span.firstChild, 1);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
     } else {
-        document.execCommand('styleWithCSS', false, true);
-        document.execCommand('fontName', false, fuente);
+        const span = document.createElement('span');
+        Object.assign(span.style, styleObj);
+        try {
+            range.surroundContents(span);
+        } catch (_) {
+            const fragment = range.extractContents();
+            span.appendChild(fragment);
+            range.insertNode(span);
+        }
+        sel.removeAllRanges();
+        const nr = document.createRange();
+        nr.selectNodeContents(span);
+        sel.addRange(nr);
     }
-    guardarNotaActivaDesdeEditor();
-    persistirBitacora();
+    bitacoraGuardarSeleccion();
+}
+
+function bitacoraAplicarFuente(fuente) {
+    bitacoraWrapStyle({ fontFamily: `'${fuente}', 'Segoe UI', Arial, sans-serif` });
+}
+
+function bitacoraAplicarTamano(px) {
+    bitacoraWrapStyle({ fontSize: px });
 }
 
 function bitacoraExec(cmd, val) {
@@ -1938,8 +2091,7 @@ function bitacoraExec(cmd, val) {
             document.execCommand(cmd, false, val ?? null);
         }
     } catch (e) { /* ignore */ }
-    guardarNotaActivaDesdeEditor();
-    persistirBitacora();
+    bitacoraGuardarSeleccion();
 }
 
 function crearToolbarBitacora(containerId) {
@@ -1993,11 +2145,11 @@ function crearToolbarBitacora(containerId) {
 
     const selSize = document.createElement('select');
     selSize.title = idioma === 'es' ? 'Tamaño' : 'Size';
-    [{ v: '2', l: 'Pequeño' }, { v: '3', l: 'Normal' }, { v: '5', l: 'Grande' }, { v: '7', l: 'Muy grande' }]
+    [{ v: '12px', l: 'Pequeño' }, { v: '14px', l: 'Normal' }, { v: '18px', l: 'Grande' }, { v: '24px', l: 'Muy grande' }]
         .forEach(({ v, l }) => { const o = document.createElement('option'); o.value = v; o.textContent = l; selSize.appendChild(o); });
-    selSize.value = '3';
+    selSize.value = '14px';
     selSize.addEventListener('mousedown', e => e.preventDefault());
-    selSize.addEventListener('change', e => bitacoraExec('fontSize', e.target.value));
+    selSize.addEventListener('change', e => bitacoraAplicarTamano(e.target.value));
     tb.appendChild(selSize);
 
     const selFont = document.createElement('select');
@@ -2014,7 +2166,6 @@ function crearToolbarBitacora(containerId) {
     addBtn('•', idioma === 'es' ? 'Lista con viñetas' : 'Bullet list', () => bitacoraExec('insertUnorderedList'));
     addBtn('1.', idioma === 'es' ? 'Lista numerada' : 'Numbered list', () => {
         bitacoraExec('insertOrderedList');
-        getBitacoraEditor()?.querySelectorAll('ol').forEach(ol => { ol.style.paddingLeft = '1.5em'; ol.style.marginLeft = '0'; });
     });
     addBtn('⬅', idioma === 'es' ? 'Alinear izquierda' : 'Align left', () => bitacoraExec('justifyLeft'));
     addBtn('⬌', idioma === 'es' ? 'Centrar' : 'Center', () => bitacoraExec('justifyCenter'));
@@ -2203,7 +2354,7 @@ function exportarExcelCompleto() {
     if (actividades.length) {
         const rows = actividades.map(a => ({
             ID: a.id, Actividad: a.nombre, Duracion: a.duracion, Unidad: getUnidadLabel(),
-            Presupuesto: parseFloat(a.presupuesto) || 0, Predecesoras: (a.predecesoras || []).join(';'),
+            Presupuesto: parseFloat(a.presupuesto) || 0, Predecesoras: formatearPredecesoras(a.predecesoras),
             Inicio: getFechaInicioActividad(a), Fin: getFechaFinActividad(a),
             ES: a.ES, EF: a.EF, LS: a.LS, LF: a.LF, Holgura: a.holgura, Critica: a.esCritica ? 'SI' : 'NO'
         }));
