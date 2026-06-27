@@ -84,7 +84,13 @@
                 <button class="btn-secundario" onclick="document.getElementById('inputCargarProyecto').click()" data-i18n="loadProject">Cargar Proyecto</button>
                 <input type="file" id="inputCargarProyecto" accept=".json" style="display:none" onchange="cargarProyecto(event)">
                 <button class="btn-secundario" onclick="exportarProyectoJSON()" data-i18n="exportProject">Exportar JSON</button>
-                <button class="btn-secundario" onclick="cargarProyectoEjemplo()" data-i18n="loadExample">Proyecto de Ejemplo</button>
+                <button class="btn-secundario" onclick="nuevoProyecto()" data-i18n="newProject">Nuevo Proyecto</button>
+                <select id="selectorEjemplo" class="select-ejemplo no-print">
+                    <option value="edificio" data-i18n="exampleBuilding">Ejemplo: Edificio residencial</option>
+                    <option value="carretera" data-i18n="exampleRoad">Ejemplo: Carretera</option>
+                    <option value="puente" data-i18n="exampleBridge">Ejemplo: Puente vehicular</option>
+                </select>
+                <button class="btn-secundario" onclick="cargarProyectoEjemplo()" data-i18n="loadExample">Cargar Ejemplo</button>
             </div>
         </section>
 
@@ -149,10 +155,12 @@
                     <label data-i18n="budget">Presupuesto Parcial (BAC actividad)</label>
                     <input type="number" id="presupuesto" min="0" step="0.01" placeholder="1000">
                 </div>
-                <div>
-                    <label data-i18n="predecessors">Predecesoras</label>
-                    <input type="text" id="dependencia" placeholder="Ej. 1FC, 2CC+2">
-                    <small class="hint" data-i18n="predecessorsHint">FC, CC, FF o CF. Ej: 1, 2CC+1, 3FF+2. Por defecto FC.</small>
+                <div class="predecesoras-dual">
+                    <label data-i18n="predecessorsList">Predecesoras — Lista (Ctrl + Click)</label>
+                    <select id="dependenciaSelect" multiple size="4"></select>
+                    <label data-i18n="predecessorsText">Predecesoras — Texto avanzado (FC, CC, FF, CF + lag)</label>
+                    <input type="text" id="dependenciaTexto" placeholder="Ej. 1FC, 2CC+2">
+                    <small class="hint" data-i18n="predecessorsDualHint">Use la lista, el texto, o combine ambas. En la lista se asume FC.</small>
                 </div>
             </div>
             <div class="acciones-grupo no-print">
@@ -351,9 +359,13 @@
                 <input type="number" id="editPresupuesto" min="0" step="0.01">
             </div>
             <div>
-                <label data-i18n="predecessors">Predecesoras</label>
-                <input type="text" id="editPredecesoras" placeholder="Ej. 1FC, 2CC+2">
-                <small class="hint" data-i18n="predecessorsHint">FC, CC, FF o CF. Ej: 1, 2CC+1. Por defecto FC.</small>
+                <label data-i18n="predecessorsList">Predecesoras — Lista (Ctrl + Click)</label>
+                <select id="editPredecesorasSelect" multiple size="4"></select>
+            </div>
+            <div>
+                <label data-i18n="predecessorsText">Predecesoras — Texto avanzado</label>
+                <input type="text" id="editPredecesorasTexto" placeholder="Ej. 1FC, 2CC+2">
+                <small class="hint" data-i18n="predecessorsDualHint">Use la lista, el texto, o combine ambas.</small>
             </div>
         </div>
         <div class="acciones-grupo" style="margin-top:16px;">
