@@ -143,19 +143,62 @@
 
         <section class="card">
             <h2 data-i18n="activityRegister">Registro de Actividades</h2>
+
+            <h3 class="seccion-form" data-i18n="activityBasicData">Datos básicos</h3>
             <div class="grid">
                 <div>
                     <label data-i18n="activityName">Nombre de la Actividad</label>
                     <input type="text" id="actividad" placeholder="Ej. Excavación">
                 </div>
                 <div>
-                    <label data-i18n="duration">Duración</label>
-                    <input type="number" id="duracion" min="1" placeholder="5">
+                    <label data-i18n="wbsCode">Código WBS (opcional)</label>
+                    <input type="text" id="wbsCodigo" placeholder="Ej. 1.2">
+                    <small class="hint" data-i18n="wbsHint">Ej. 1.2 — agrupa actividades en el cronograma</small>
                 </div>
                 <div>
                     <label data-i18n="budget">Presupuesto Parcial (BAC actividad)</label>
                     <input type="number" id="presupuesto" min="0" step="0.01" placeholder="1000">
                 </div>
+            </div>
+
+            <h3 class="seccion-form" data-i18n="activityDurationSection">Duración de la actividad</h3>
+            <div class="opciones-duracion">
+                <label class="toggle-label opcion-duracion">
+                    <input type="checkbox" id="esHito" onchange="toggleOpcionesActividad('add')">
+                    <span data-i18n="isMilestone">Es hito (duración 0)</span>
+                </label>
+                <small class="hint" data-i18n="milestoneHint">Evento sin duración: inicio de obra, recepción, etc.</small>
+                <label class="toggle-label opcion-duracion">
+                    <input type="checkbox" id="usarPERT" onchange="toggleOpcionesActividad('add')">
+                    <span data-i18n="usePERT">Usar estimación PERT (3 valores)</span>
+                </label>
+                <small class="hint" data-i18n="usePERTHint">Opcional. Duración = (O + 4M + P) / 6</small>
+                <div id="duracionWrap">
+                    <label data-i18n="duration">Duración</label>
+                    <input type="number" id="duracion" min="0.1" step="0.1" placeholder="5">
+                </div>
+                <div id="panelPERT" class="panel-pert grid" style="display:none;">
+                    <div>
+                        <label data-i18n="pertOptimistic">Optimista (O)</label>
+                        <input type="number" id="pertO" min="0.1" step="0.1" oninput="actualizarPreviewPERT('add')">
+                    </div>
+                    <div>
+                        <label data-i18n="pertMostLikely">Más probable (M)</label>
+                        <input type="number" id="pertM" min="0.1" step="0.1" oninput="actualizarPreviewPERT('add')">
+                    </div>
+                    <div>
+                        <label data-i18n="pertPessimistic">Pesimista (P)</label>
+                        <input type="number" id="pertP" min="0.1" step="0.1" oninput="actualizarPreviewPERT('add')">
+                    </div>
+                    <div class="pert-resultado">
+                        <label data-i18n="pertResult">Duración PERT calculada</label>
+                        <p id="pertResultado" class="pert-preview">—</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="seccion-form" data-i18n="activityDepsSection">Dependencias (secuencia lógica)</h3>
+            <div class="grid">
                 <div class="predecesoras-dual">
                     <label data-i18n="predecessorsList">Predecesoras — Lista (Ctrl + Click)</label>
                     <select id="dependenciaSelect" multiple size="4"></select>
@@ -171,12 +214,21 @@
         </section>
 
         <section class="card">
-            <h2 data-i18n="scheduleTitle">Cronograma del Proyecto</h2>
+            <div class="card-header-flex">
+                <h2 data-i18n="scheduleTitle">Cronograma del Proyecto</h2>
+                <div class="acciones-grupo no-print baseline-acciones">
+                    <button type="button" class="btn-secundario" onclick="guardarLineaBase()" data-i18n="baselineSave">Guardar línea base</button>
+                    <button type="button" class="btn-secundario" onclick="limpiarLineaBase()" data-i18n="baselineClear">Quitar línea base</button>
+                </div>
+            </div>
+            <p class="subtitle" data-i18n="baselineHint">Congela el plan actual para comparar desviaciones después de cambios.</p>
+            <div id="whatIfBanner" class="whatif-banner" style="display:none;"></div>
             <div class="table-wrapper">
                 <table>
                     <thead>
                         <tr>
                             <th>ID</th>
+                            <th data-i18n="colWBS">WBS</th>
                             <th data-i18n="colActivity">Actividad</th>
                             <th data-i18n="colDuration">Duración</th>
                             <th data-i18n="colBudget">Presupuesto</th>
@@ -185,6 +237,7 @@
                             <th data-i18n="colEndDate">Fecha Fin</th>
                             <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
                             <th data-i18n="colSlack">Holgura</th>
+                            <th data-i18n="colDeviation">Desv.</th>
                             <th data-i18n="colStatus">Estado</th>
                             <th data-i18n="colPctTotal">% Total</th>
                             <th data-i18n="colActions">Acc.</th>
@@ -210,8 +263,36 @@
                 <div class="leyenda-item"><span class="cuadro-celeste"></span> <span data-i18n="legendSlack">Holgura</span></div>
                 <div class="leyenda-item"><span class="cuadro-critico"></span> <span data-i18n="legendCritical">Ruta crítica</span></div>
                 <div class="leyenda-item"><span class="cuadro-nolab"></span> <span data-i18n="legendNonWork">No laborable</span></div>
+                <div class="leyenda-item"><span class="cuadro-hito"></span> <span data-i18n="legendMilestone">Hito</span></div>
             </div>
             <div id="ganttContainer" class="gantt-container"></div>
+        </section>
+
+        <section class="card no-print">
+            <h2 data-i18n="pdmTitle">Diagrama de Red PDM</h2>
+            <p class="subtitle" data-i18n="pdmHint">Visualización AON del cronograma. La ruta crítica se resalta en rojo.</p>
+            <div id="pdmContainer" class="pdm-container"></div>
+        </section>
+
+        <section class="card no-print">
+            <h2 data-i18n="whatIfTitle">Análisis ¿Qué pasa si…?</h2>
+            <p class="subtitle" data-i18n="whatIfHint">Simule un retraso sin modificar el proyecto hasta que confirme.</p>
+            <div class="grid grid-whatif">
+                <div>
+                    <label data-i18n="whatIfActivity">Actividad</label>
+                    <select id="whatIfActividad"></select>
+                </div>
+                <div>
+                    <label data-i18n="whatIfDelay">Retraso (+ días)</label>
+                    <input type="number" id="whatIfDias" min="1" step="1" value="1">
+                </div>
+            </div>
+            <div class="acciones-grupo">
+                <button type="button" class="btn-secundario" onclick="simularWhatIf()" data-i18n="whatIfSimulate">Simular</button>
+                <button type="button" onclick="aplicarWhatIf()" data-i18n="whatIfApply">Aplicar al proyecto</button>
+                <button type="button" class="btn-peligro" onclick="cancelarWhatIf()" data-i18n="whatIfCancel">Cancelar simulación</button>
+            </div>
+            <p id="whatIfResultado" class="whatif-resultado"></p>
         </section>
 
         <section class="card">
@@ -346,19 +427,56 @@
     <div class="modal-card">
         <h3 data-i18n="editActivity">Editar Actividad</h3>
         <input type="hidden" id="editActId">
+        <h3 class="seccion-form" data-i18n="activityBasicData">Datos básicos</h3>
         <div class="grid">
             <div>
                 <label data-i18n="activityName">Nombre de la Actividad</label>
                 <input type="text" id="editNombre">
             </div>
             <div>
-                <label data-i18n="duration">Duración</label>
-                <input type="number" id="editDuracion" min="1">
+                <label data-i18n="wbsCode">Código WBS (opcional)</label>
+                <input type="text" id="editWbsCodigo" placeholder="Ej. 1.2">
             </div>
             <div>
                 <label data-i18n="budget">Presupuesto Parcial (BAC actividad)</label>
                 <input type="number" id="editPresupuesto" min="0" step="0.01">
             </div>
+        </div>
+        <h3 class="seccion-form" data-i18n="activityDurationSection">Duración de la actividad</h3>
+        <div class="opciones-duracion">
+            <label class="toggle-label opcion-duracion">
+                <input type="checkbox" id="editEsHito" onchange="toggleOpcionesActividad('edit')">
+                <span data-i18n="isMilestone">Es hito (duración 0)</span>
+            </label>
+            <label class="toggle-label opcion-duracion">
+                <input type="checkbox" id="editUsarPERT" onchange="toggleOpcionesActividad('edit')">
+                <span data-i18n="usePERT">Usar estimación PERT (3 valores)</span>
+            </label>
+            <div id="editDuracionWrap">
+                <label data-i18n="duration">Duración</label>
+                <input type="number" id="editDuracion" min="0.1" step="0.1">
+            </div>
+            <div id="editPanelPERT" class="panel-pert grid" style="display:none;">
+                <div>
+                    <label data-i18n="pertOptimistic">Optimista (O)</label>
+                    <input type="number" id="editPertO" min="0.1" step="0.1" oninput="actualizarPreviewPERT('edit')">
+                </div>
+                <div>
+                    <label data-i18n="pertMostLikely">Más probable (M)</label>
+                    <input type="number" id="editPertM" min="0.1" step="0.1" oninput="actualizarPreviewPERT('edit')">
+                </div>
+                <div>
+                    <label data-i18n="pertPessimistic">Pesimista (P)</label>
+                    <input type="number" id="editPertP" min="0.1" step="0.1" oninput="actualizarPreviewPERT('edit')">
+                </div>
+                <div class="pert-resultado">
+                    <label data-i18n="pertResult">Duración PERT calculada</label>
+                    <p id="editPertResultado" class="pert-preview">—</p>
+                </div>
+            </div>
+        </div>
+        <h3 class="seccion-form" data-i18n="activityDepsSection">Dependencias (secuencia lógica)</h3>
+        <div class="grid">
             <div>
                 <label data-i18n="predecessorsList">Predecesoras — Lista (Ctrl + Click)</label>
                 <select id="editPredecesorasSelect" multiple size="4"></select>
