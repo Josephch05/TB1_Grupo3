@@ -533,6 +533,80 @@ function aplicarWhatIf() {
 const PDM_START_ID = '__inicio__';
 const PDM_END_ID = '__final__';
 
+function normalizarColumnasPDM(columns) {
+    const raw = [...new Set(Object.values(columns))].sort((a, b) => a - b);
+    const map = {};
+    raw.forEach((c, i) => { map[c] = i; });
+    const out = {};
+    Object.entries(columns).forEach(([id, c]) => { out[id] = map[c]; });
+    return out;
+}
+
+function reconstruirByCol(columns) {
+    const byCol = {};
+    Object.entries(columns).forEach(([id, col]) => {
+        (byCol[col] ??= []).push(id);
+    });
+    return byCol;
+}
+
+function ordenarNodosColumnasPDM(byCol, edges, nodos) {
+    const colKeys = Object.keys(byCol).map(Number).sort((a, b) => a - b);
+    const order = {};
+    const preds = id => edges.filter(e => e.to === id).map(e => e.from);
+    const succs = id => edges.filter(e => e.from === id).map(e => e.to);
+
+    const sortInicial = (a, b) => {
+        const na = nodos[a], nb = nodos[b];
+        if (na?.id === PDM_START_ID) return -1;
+        if (nb?.id === PDM_START_ID) return 1;
+        if (na?.id === PDM_END_ID) return 1;
+        if (nb?.id === PDM_END_ID) return -1;
+        return (na?.ES ?? 0) - (nb?.ES ?? 0) || (na?.EF ?? 0) - (nb?.EF ?? 0) || String(a).localeCompare(String(b));
+    };
+
+    colKeys.forEach(col => {
+        byCol[col] = (byCol[col] || []).filter(id => id !== PDM_END_ID);
+        byCol[col].sort(sortInicial);
+        byCol[col].forEach((id, i) => { order[id] = i; });
+    });
+
+    const barycenter = (ids, neighborsFn) => ids.map(id => {
+        const nb = neighborsFn(id).filter(n => order[n] !== undefined);
+        if (!nb.length) return { id, bc: order[id] ?? 0 };
+        const bc = nb.reduce((s, n) => s + order[n], 0) / nb.length;
+        return { id, bc };
+    }).sort((a, b) => a.bc - b.bc || sortInicial(a.id, b.id));
+
+    const endCol = colKeys[colKeys.length - 1];
+    const colsActividad = colKeys.filter(c => c !== endCol || !byCol[c]?.includes(PDM_END_ID));
+
+    for (let iter = 0; iter < 16; iter++) {
+        for (let ci = 1; ci < colsActividad.length; ci++) {
+            const col = colsActividad[ci];
+            if (!byCol[col]?.length) continue;
+            byCol[col] = barycenter(byCol[col].filter(id => id !== PDM_END_ID), preds).map(x => x.id);
+            byCol[col].forEach((id, i) => { order[id] = i; });
+        }
+        for (let ci = colsActividad.length - 2; ci >= 0; ci--) {
+            const col = colsActividad[ci];
+            if (!byCol[col]?.length) continue;
+            byCol[col] = barycenter(byCol[col].filter(id => id !== PDM_END_ID), succs).map(x => x.id);
+            byCol[col].forEach((id, i) => { order[id] = i; });
+        }
+    }
+
+    colKeys.forEach(col => {
+        const list = byCol[col] || [];
+        const startIdx = list.indexOf(PDM_START_ID);
+        if (startIdx > 0) {
+            list.splice(startIdx, 1);
+            list.unshift(PDM_START_ID);
+        }
+        byCol[col] = list;
+    });
+}
+
 function construirLayoutPDM() {
     actividades.forEach(normalizarPredecesoras);
     const total = Math.max(...actividades.map(a => a.EF), 0);
@@ -565,7 +639,7 @@ function construirLayoutPDM() {
     let guard = 0;
     while (changed && guard++ < actividades.length + 5) {
         changed = false;
-        edges.forEach(e => {
+        edges.filter(e => e.to !== PDM_END_ID).forEach(e => {
             if (columns[e.from] === undefined) return;
             const next = columns[e.from] + 1;
             if ((columns[e.to] ?? -1) < next) {
@@ -574,27 +648,38 @@ function construirLayoutPDM() {
             }
         });
     }
+    const maxActCol = Math.max(
+        ...Object.entries(columns).filter(([id]) => id !== PDM_END_ID).map(([, c]) => c),
+        0
+    );
+    columns[PDM_END_ID] = maxActCol + 1;
+    const columnsNorm = normalizarColumnasPDM(columns);
+    Object.assign(columns, columnsNorm);
 
-    const byCol = {};
-    Object.entries(columns).forEach(([id, col]) => {
-        if (!byCol[col]) byCol[col] = [];
-        byCol[col].push(id);
-    });
-    Object.values(byCol).forEach(list => list.sort((a, b) => {
-        const na = nodos[a], nb = nodos[b];
-        if (na?.esPseudo && !nb?.esPseudo) return -1;
-        if (nb?.esPseudo && !na?.esPseudo) return 1;
-        return (na?.ES ?? 0) - (nb?.ES ?? 0) || String(a).localeCompare(String(b));
-    }));
+    let byCol = reconstruirByCol(columns);
+    byCol[columns[PDM_END_ID]] = [PDM_END_ID];
+    ordenarNodosColumnasPDM(byCol, edges, nodos);
 
-    const boxW = 118, boxH = 76, gapX = 48, gapY = 22, pad = 40;
+    const boxW = 118, boxH = 76, gapX = 56, gapY = 26, pad = 36;
     const positions = {};
     const colKeys = Object.keys(byCol).map(Number).sort((a, b) => a - b);
+    const numCols = colKeys.length;
     let maxRows = 1;
-    colKeys.forEach(c => { maxRows = Math.max(maxRows, byCol[c].length); });
+    colKeys.forEach(c => {
+        if (c !== columns[PDM_END_ID]) maxRows = Math.max(maxRows, (byCol[c] || []).length);
+    });
 
     colKeys.forEach(col => {
-        const ids = byCol[col];
+        const ids = (byCol[col] || []).filter(id => id !== PDM_END_ID);
+        if (col === columns[PDM_END_ID]) {
+            const gridH = maxRows * boxH + Math.max(0, maxRows - 1) * gapY;
+            positions[PDM_END_ID] = {
+                x: pad + col * (boxW + gapX),
+                y: pad + (gridH - boxH) / 2,
+                w: boxW, h: boxH
+            };
+            return;
+        }
         const rowH = ids.length * boxH + Math.max(0, ids.length - 1) * gapY;
         const startY = pad + (maxRows * (boxH + gapY) - gapY - rowH) / 2;
         ids.forEach((id, ri) => {
@@ -606,26 +691,30 @@ function construirLayoutPDM() {
         });
     });
 
-    const width = pad * 2 + (colKeys.length * boxW) + Math.max(0, colKeys.length - 1) * gapX;
+    const width = pad * 2 + numCols * boxW + Math.max(0, numCols - 1) * gapX;
     const height = pad * 2 + maxRows * boxH + Math.max(0, maxRows - 1) * gapY;
-    return { nodos, edges, columns, positions, width, height, boxW, boxH };
+    return { nodos, edges, columns, positions, width, height, boxW, boxH, gapX, pad, numCols };
 }
 
 function dibujarNodoPDM(n, x, y, boxW, boxH, u) {
-    const fill = n.esPseudo ? '#ecfdf5' : (n.esCritica ? '#fee2e2' : (n.esHito ? '#fef3c7' : '#ffffff'));
+    const esInicio = n.id === PDM_START_ID;
+    const esFinal = n.id === PDM_END_ID;
+    const fill = n.esPseudo ? (esInicio ? '#ecfdf5' : '#f0fdf4') : (n.esCritica ? '#fee2e2' : (n.esHito ? '#fef3c7' : '#ffffff'));
     const stroke = n.esPseudo ? '#059669' : (n.esCritica ? '#c8102e' : '#64748b');
     const sw = n.esCritica || n.esPseudo ? 2.5 : 1.5;
     let svg = `<rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
-    if (n.esPseudo) {
-        svg += `<text x="${x + boxW / 2}" y="${y + boxH / 2 + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#047857">${escapeHtmlPdm(n.nombre)}</text>`;
-        return svg;
-    }
     svg += `<text x="${x + 8}" y="${y + 13}" font-size="9" font-weight="700" fill="#0369a1">${n.ES ?? 0}</text>`;
     svg += `<text x="${x + boxW - 8}" y="${y + 13}" font-size="9" font-weight="700" fill="#0369a1" text-anchor="end">${n.EF ?? 0}</text>`;
     svg += `<text x="${x + 8}" y="${y + boxH - 5}" font-size="9" font-weight="700" fill="#6d28d9">${n.LS ?? 0}</text>`;
     svg += `<text x="${x + boxW - 8}" y="${y + boxH - 5}" font-size="9" font-weight="700" fill="#6d28d9" text-anchor="end">${n.LF ?? 0}</text>`;
     svg += `<line x1="${x + 5}" y1="${y + 18}" x2="${x + boxW - 5}" y2="${y + 18}" stroke="#e2e8f0" stroke-width="1"/>`;
     svg += `<line x1="${x + 5}" y1="${y + boxH - 16}" x2="${x + boxW - 5}" y2="${y + boxH - 16}" stroke="#e2e8f0" stroke-width="1"/>`;
+    if (n.esPseudo) {
+        const label = escapeHtmlPdm(n.nombre || '');
+        svg += `<text x="${x + boxW / 2}" y="${y + 36}" text-anchor="middle" font-size="10" font-weight="700" fill="#047857">${label}</text>`;
+        svg += `<text x="${x + boxW / 2}" y="${y + 54}" text-anchor="middle" font-size="8" fill="#64748b">:0 ${u}</text>`;
+        return svg;
+    }
     const label = n.esHito ? `${n.id} ◆` : `${n.id}`;
     svg += `<text x="${x + boxW / 2}" y="${y + 32}" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">${label}</text>`;
     const nombre = escapeHtmlPdm((n.nombre || '').length > 13 ? n.nombre.slice(0, 12) + '…' : n.nombre);
@@ -635,29 +724,170 @@ function dibujarNodoPDM(n, x, y, boxW, boxH, u) {
     return svg;
 }
 
+function prepararRutasPDM(edges, positions, columns) {
+    const yCenter = id => (positions[id]?.y ?? 0) + (positions[id]?.h ?? 0) / 2;
+    const outMap = {}, inMap = {};
+    edges.forEach((e, idx) => {
+        (outMap[e.from] ??= []).push({ e, idx });
+        (inMap[e.to] ??= []).push({ e, idx });
+    });
+    Object.values(outMap).forEach(list => {
+        list.sort((a, b) => yCenter(a.e.to) - yCenter(b.e.to) || a.idx - b.idx);
+    });
+    Object.values(inMap).forEach(list => {
+        list.sort((a, b) => yCenter(a.e.from) - yCenter(b.e.from) || a.idx - b.idx);
+    });
+
+    const laneBuckets = {};
+    edges.forEach((e, idx) => {
+        (laneBuckets[e.from] ??= []).push(idx);
+    });
+    const laneInfo = {};
+    Object.entries(laneBuckets).forEach(([, list]) => {
+        list.sort((a, b) => yCenter(edges[a].to) - yCenter(edges[b].to) || a - b);
+        list.forEach((edgeIdx, laneIdx) => {
+            laneInfo[edgeIdx] = { laneIdx, laneTotal: list.length };
+        });
+    });
+
+    const outIdx = {}, inIdx = {};
+    Object.values(outMap).forEach(list => {
+        list.forEach((item, i) => { outIdx[item.idx] = { i, total: list.length }; });
+    });
+    Object.values(inMap).forEach(list => {
+        list.forEach((item, i) => { inIdx[item.idx] = { i, total: list.length }; });
+    });
+    return { outIdx, inIdx, laneInfo };
+}
+
+function anclaBordePDM(box, lado, idx, total) {
+    const pad = 10;
+    const cx = lado === 'der' ? box.x + box.w : box.x;
+    if (total <= 1) return { x: cx, y: box.y + box.h / 2 };
+    const span = Math.max(box.h - pad * 2, 1);
+    const y = box.y + pad + (span * idx) / (total - 1);
+    return { x: cx, y };
+}
+
+function segmentoCruzaCajaPDM(xA, yA, xB, yB, box, margen = 5) {
+    const bx1 = box.x - margen, bx2 = box.x + box.w + margen;
+    const by1 = box.y - margen, by2 = box.y + box.h + margen;
+    const steps = Math.max(8, Math.ceil(Math.hypot(xB - xA, yB - yA) / 6));
+    for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const px = xA + (xB - xA) * t;
+        const py = yA + (yB - yA) * t;
+        if (px >= bx1 && px <= bx2 && py >= by1 && py <= by2) return true;
+    }
+    return false;
+}
+
+function polylineCruzaNodosPDM(pts, positions, skipIds) {
+    for (let i = 0; i < pts.length - 1; i++) {
+        const [xa, ya] = pts[i], [xb, yb] = pts[i + 1];
+        for (const [id, box] of Object.entries(positions)) {
+            if (skipIds.has(id)) continue;
+            if (segmentoCruzaCajaPDM(xa, ya, xb, yb, box)) return true;
+        }
+    }
+    return false;
+}
+
+function ptsToPathPDM(pts) {
+    return pts.map(([x, y], i) => (i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`)).join(' ');
+}
+
+function generarCandidatosRutaPDM(p1, p2, laneIdx, laneTotal) {
+    const x1 = p1.x, y1 = p1.y;
+    const x2 = p2.x - 8, y2 = p2.y;
+    const lane = (laneIdx - (laneTotal - 1) / 2) * 16;
+    const dx = x2 - x1, dy = y2 - y1;
+    const candidatos = [];
+
+    candidatos.push([[x1, y1], [x2, y2]]);
+
+    const exit = 20 + Math.abs(lane) * 0.25;
+    const entry = 20;
+    const midX = x1 + dx * 0.48 + lane;
+    const midY = y1 + dy * 0.5 + lane * 0.15;
+
+    candidatos.push([[x1, y1], [x1 + exit, y1 + lane * 0.2], [x2 - entry, y2], [x2, y2]]);
+    candidatos.push([[x1, y1], [midX, y1], [midX, y2], [x2, y2]]);
+    candidatos.push([[x1, y1], [midX, midY], [x2, y2]]);
+    candidatos.push([[x1, y1], [x1 + dx * 0.3 + lane, y1 + dy * 0.2], [x1 + dx * 0.7 + lane, y2 - dy * 0.2], [x2, y2]]);
+
+    if (Math.abs(dy) > 8) {
+        const corY = y1 + (dy > 0 ? -1 : 1) * (30 + Math.abs(lane));
+        candidatos.push([[x1, y1], [x1 + exit, y1], [x1 + exit, corY], [x2 - entry, corY], [x2 - entry, y2], [x2, y2]]);
+        candidatos.push([[x1, y1], [x1 + dx * 0.25 + lane, y1 + dy * 0.1], [x2 - entry, corY], [x2 - entry, y2], [x2, y2]]);
+    }
+
+    for (let k = -3; k <= 3; k++) {
+        if (k === 0) continue;
+        const off = lane + k * 10;
+        candidatos.push([[x1, y1], [x1 + dx * 0.35 + off, y1 + dy * 0.25], [x1 + dx * 0.65 + off, y2 - dy * 0.25], [x2, y2]]);
+    }
+
+    return candidatos.filter(pts => {
+        const last = pts[pts.length - 1];
+        return last[0] <= x2 + 1 && Math.hypot(last[0] - x2, last[1] - y2) < 2;
+    });
+}
+
+function rutaFlexiblePDM(p1, p2, laneIdx, laneTotal, positions, skipIds) {
+    const candidatos = generarCandidatosRutaPDM(p1, p2, laneIdx, laneTotal);
+    let mejor = null;
+    let mejorScore = Infinity;
+    const x2 = p2.x - 8, y2 = p2.y;
+
+    candidatos.forEach(pts => {
+        if (polylineCruzaNodosPDM(pts, positions, skipIds)) return;
+        const segs = pts.length - 1;
+        let len = 0;
+        for (let i = 1; i < pts.length; i++) {
+            len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        }
+        const directLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const score = len + (segs === 1 ? 0 : segs * 8) + Math.abs(len - directLen) * 0.05;
+        if (score < mejorScore) { mejorScore = score; mejor = pts; }
+    });
+
+    if (mejor) return ptsToPathPDM(mejor);
+    const lane = (laneIdx - (laneTotal - 1) / 2) * 16;
+    const midX = p1.x + (x2 - p1.x) * 0.5 + lane;
+    return ptsToPathPDM([[p1.x, p1.y], [midX, p1.y], [midX, y2], [x2, y2]]);
+}
+
 function generarSvgDiagramaPDM(compact = false) {
     if (!actividades.length) return '';
     const layout = construirLayoutPDM();
-    const { nodos, edges, positions, width, height } = layout;
+    const { nodos, edges, positions, columns, width, height } = layout;
     const u = getUnidadLabel();
     const uid = 'pdm' + Math.random().toString(36).slice(2, 8);
-    let svg = `<svg viewBox="0 0 ${width} ${height + (compact ? 0 : 28)}" class="pdm-svg" xmlns="http://www.w3.org/2000/svg">`;
-    svg += `<defs><marker id="${uid}Arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748b"/></marker>`;
+    const { outIdx, inIdx, laneInfo } = prepararRutasPDM(edges, positions, columns);
+    const legendH = compact ? 0 : 28;
+    let svg = `<svg viewBox="0 0 ${width} ${height + legendH}" style="min-width:${width}px;width:max(100%,${width}px)" class="pdm-svg" xmlns="http://www.w3.org/2000/svg">`;
+    svg += `<defs><marker id="${uid}Arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#475569"/></marker>`;
     svg += `<marker id="${uid}ArrCrit" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#c8102e"/></marker></defs>`;
 
-    edges.forEach(e => {
+    edges.forEach((e, edgeIdx) => {
         const from = positions[e.from], to = positions[e.to];
         if (!from || !to) return;
         const fn = nodos[e.from], tn = nodos[e.to];
         const critica = fn?.esCritica && tn?.esCritica && !fn?.esPseudo && !tn?.esPseudo;
-        const x1 = from.x + from.w, y1 = from.y + from.h / 2;
-        const x2 = to.x, y2 = to.y + to.h / 2;
-        const midX = (x1 + x2) / 2;
-        const stroke = critica ? '#c8102e' : '#94a3b8';
-        const sw = critica ? 2.2 : 1.5;
-        svg += `<path d="M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}" fill="none" stroke="${stroke}" stroke-width="${sw}" marker-end="url(#${uid}${critica ? 'ArrCrit' : 'Arr'})"/>`;
+        const oi = outIdx[edgeIdx] || { i: 0, total: 1 };
+        const ii = inIdx[edgeIdx] || { i: 0, total: 1 };
+        const lane = laneInfo[edgeIdx] || { laneIdx: 0, laneTotal: 1 };
+        const p1 = anclaBordePDM(from, 'der', oi.i, oi.total);
+        const p2 = anclaBordePDM(to, 'izq', ii.i, ii.total);
+        const skipIds = new Set([e.from, e.to]);
+        const d = rutaFlexiblePDM(p1, p2, lane.laneIdx, lane.laneTotal, positions, skipIds);
+        const stroke = critica ? '#c8102e' : '#475569';
+        const sw = critica ? 2.2 : 1.6;
+        svg += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${uid}${critica ? 'ArrCrit' : 'Arr'})"/>`;
         if (e.link?.tipo && e.link.tipo !== 'FC') {
-            svg += `<text x="${midX}" y="${(y1 + y2) / 2 - 4}" text-anchor="middle" font-size="7" fill="#c8102e">${e.link.tipo}${e.link.lag ? (e.link.lag > 0 ? '+' + e.link.lag : e.link.lag) : ''}</text>`;
+            const midX = (p1.x + p2.x) / 2;
+            svg += `<text x="${midX}" y="${(p1.y + p2.y) / 2 - 4}" text-anchor="middle" font-size="7" fill="#c8102e">${e.link.tipo}${e.link.lag ? (e.link.lag > 0 ? '+' + e.link.lag : e.link.lag) : ''}</text>`;
         }
     });
 
