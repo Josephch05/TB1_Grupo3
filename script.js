@@ -30,6 +30,10 @@ let diasCalendarioGantt = [];
 let chartInformeCurvaS = null;
 let chartInformeEscenarios = null;
 let autoSaveTimer = null;
+let lineaBase = null;
+let whatIfExtra = {};
+let whatIfActivo = false;
+let whatIfActId = null;
 const STORAGE_KEY = 'tb1_proyecto';
 const BITACORA_KEY = 'tb1_bitacora';
 
@@ -48,6 +52,46 @@ const traducciones = {
         language: 'Idioma', currency: 'Moneda',
         activityRegister: 'Registro de Actividades', activityName: 'Nombre de la Actividad',
         duration: 'Duración', budget: 'Presupuesto Parcial (BAC actividad)',
+        usePERT: 'Usar estimación PERT (3 valores)',
+        usePERTHint: 'Opcional. Si activa, la duración se calcula con (O + 4M + P) / 6 en lugar del campo Duración.',
+        pertOptimistic: 'Optimista (O)', pertMostLikely: 'Más probable (M)', pertPessimistic: 'Pesimista (P)',
+        pertResult: 'Duración PERT calculada',
+        alertPERTInvalid: 'Con PERT activo ingrese valores O, M y P mayores a 0 (recomendado: O ≤ M ≤ P).',
+        isMilestone: 'Es hito (duración 0)',
+        milestoneHint: 'Evento sin duración: inicio de obra, recepción, etc.',
+        wbsCode: 'Código WBS (opcional)',
+        wbsHint: 'Ej. 1.2 — agrupa actividades en el cronograma',
+        activityBasicData: 'Datos básicos',
+        activityDurationSection: 'Duración de la actividad',
+        activityDepsSection: 'Dependencias (secuencia lógica)',
+        pdmTitle: 'Diagrama de Red PDM',
+        pdmHint: 'Flujo horizontal de izquierda a derecha (Inicio → Final). ES/EF arriba, LS/LF abajo. Ruta crítica en rojo.',
+        pdmEmpty: 'Agregue actividades para ver el diagrama de red.',
+        pdmStart: 'INICIO',
+        pdmEnd: 'FINAL',
+        pdmLegendES: 'ES — Inicio temprano',
+        pdmLegendEF: 'EF — Fin temprano',
+        pdmLegendLS: 'LS — Inicio tardío',
+        pdmLegendLF: 'LF — Fin tardío',
+        baselineTitle: 'Línea base del cronograma',
+        baselineSave: 'Guardar línea base',
+        baselineClear: 'Quitar línea base',
+        baselineHint: 'Congela el plan actual para comparar desviaciones después de cambios.',
+        baselineSaved: 'Línea base guardada.',
+        colWBS: 'WBS',
+        colDeviation: 'Desv.',
+        noBaseline: '—',
+        whatIfTitle: 'Análisis ¿Qué pasa si…?',
+        whatIfHint: 'Simule un retraso sin modificar el proyecto hasta que confirme.',
+        whatIfActivity: 'Actividad',
+        whatIfDelay: 'Retraso (+ días)',
+        whatIfSimulate: 'Simular',
+        whatIfApply: 'Aplicar al proyecto',
+        whatIfCancel: 'Cancelar simulación',
+        whatIfActive: 'Modo simulación activo — los valores mostrados incluyen el retraso simulado.',
+        whatIfResult: 'Duración total del proyecto',
+        legendMilestone: 'Hito',
+        badgeMilestone: 'Hito',
         predecessors: 'Predecesoras', predecessorsHint: 'FC, CC, FF o CF. Ej: 1, 2CC+1, 3FF+2. Por defecto FC.',
         predecessorsList: 'Predecesoras — Lista (Ctrl + Click)',
         predecessorsText: 'Predecesoras — Texto avanzado (FC, CC, FF, CF + lag)',
@@ -157,6 +201,46 @@ const traducciones = {
         language: 'Language', currency: 'Currency',
         activityRegister: 'Activity Register', activityName: 'Activity Name',
         duration: 'Duration', budget: 'Partial Budget (activity BAC)',
+        usePERT: 'Use PERT estimation (3 values)',
+        usePERTHint: 'Optional. When enabled, duration is (O + 4M + P) / 6 instead of the Duration field.',
+        pertOptimistic: 'Optimistic (O)', pertMostLikely: 'Most likely (M)', pertPessimistic: 'Pessimistic (P)',
+        pertResult: 'Calculated PERT duration',
+        alertPERTInvalid: 'With PERT enabled, enter O, M and P values greater than 0 (recommended: O ≤ M ≤ P).',
+        isMilestone: 'Is milestone (zero duration)',
+        milestoneHint: 'Zero-duration event: project start, handover, etc.',
+        wbsCode: 'WBS code (optional)',
+        wbsHint: 'E.g. 1.2 — groups activities in the schedule',
+        activityBasicData: 'Basic data',
+        activityDurationSection: 'Activity duration',
+        activityDepsSection: 'Dependencies (logic sequence)',
+        pdmTitle: 'PDM Network Diagram',
+        pdmHint: 'Horizontal flow left to right (Start → End). ES/EF top, LS/LF bottom. Critical path in red.',
+        pdmEmpty: 'Add activities to see the network diagram.',
+        pdmStart: 'START',
+        pdmEnd: 'END',
+        pdmLegendES: 'ES — Early Start',
+        pdmLegendEF: 'EF — Early Finish',
+        pdmLegendLS: 'LS — Late Start',
+        pdmLegendLF: 'LF — Late Finish',
+        baselineTitle: 'Schedule baseline',
+        baselineSave: 'Save baseline',
+        baselineClear: 'Clear baseline',
+        baselineHint: 'Freezes the current plan to compare deviations after changes.',
+        baselineSaved: 'Baseline saved.',
+        colWBS: 'WBS',
+        colDeviation: 'Dev.',
+        noBaseline: '—',
+        whatIfTitle: 'What-if analysis',
+        whatIfHint: 'Simulate a delay without changing the project until you confirm.',
+        whatIfActivity: 'Activity',
+        whatIfDelay: 'Delay (+ days)',
+        whatIfSimulate: 'Simulate',
+        whatIfApply: 'Apply to project',
+        whatIfCancel: 'Cancel simulation',
+        whatIfActive: 'Simulation mode — displayed values include the simulated delay.',
+        whatIfResult: 'Total project duration',
+        legendMilestone: 'Milestone',
+        badgeMilestone: 'Milestone',
         predecessors: 'Predecessors', predecessorsHint: 'FC, CC, FF or CF. E.g. 1, 2SS+1. Default FC.',
         predecessorsList: 'Predecessors — List (Ctrl + Click)',
         predecessorsText: 'Predecessors — Advanced text (FC, CC, FF, CF + lag)',
@@ -300,14 +384,406 @@ function getPredecesorasIds(act) {
     return (act.predecesoras || []).map(p => p.id);
 }
 
+function getDuracionCPM(act) {
+    if (act.esHito) return 0;
+    const base = act.duracion || 0;
+    if (whatIfActivo && whatIfActId === act.id) return base + (whatIfExtra[act.id] || 0);
+    return base;
+}
+
+function escapeHtmlPdm(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function toggleOpcionesActividad(modo) {
+    const esEdit = modo === 'edit';
+    const esHito = document.getElementById(esEdit ? 'editEsHito' : 'esHito');
+    const usarPERT = document.getElementById(esEdit ? 'editUsarPERT' : 'usarPERT');
+    const durWrap = document.getElementById(esEdit ? 'editDuracionWrap' : 'duracionWrap');
+    const panelPERT = document.getElementById(esEdit ? 'editPanelPERT' : 'panelPERT');
+    const pertCheckWrap = usarPERT?.closest('.opcion-duracion');
+    if (!esHito) return;
+    const hitoActivo = esHito.checked;
+    if (hitoActivo && usarPERT) {
+        usarPERT.checked = false;
+    }
+    if (pertCheckWrap) pertCheckWrap.style.display = hitoActivo ? 'none' : 'flex';
+    if (durWrap) durWrap.style.display = hitoActivo ? 'none' : 'block';
+    if (panelPERT) panelPERT.style.display = 'none';
+    if (!hitoActivo) togglePanelPERT(modo);
+}
+
+function calcularDuracionPERT(o, m, p) {
+    return Math.max(0.1, Math.round(((o + 4 * m + p) / 6) * 10) / 10);
+}
+
+function normalizarActividadPERT(act) {
+    if (act.usarPERT && act.pertO > 0 && act.pertM > 0 && act.pertP > 0) {
+        act.duracionPertExacta = (act.pertO + 4 * act.pertM + act.pertP) / 6;
+        act.duracion = calcularDuracionPERT(act.pertO, act.pertM, act.pertP);
+    }
+}
+
+function normalizarTodasActividadesPERT() {
+    actividades.forEach(normalizarActividadPERT);
+}
+
+function formatearDuracionActividad(act) {
+    const u = getUnidadLabel();
+    if (act.esHito) {
+        return `<span class="badge-hito" title="${t('milestoneHint')}">${t('badgeMilestone')}</span> 0 ${u}`;
+    }
+    let txt = `${getDuracionCPM(act)} ${u}`;
+    if (whatIfActivo && whatIfActId === act.id && whatIfExtra[act.id]) {
+        txt += ` <span class="badge-whatif">+${whatIfExtra[act.id]}</span>`;
+    }
+    if (act.usarPERT) {
+        const exact = act.duracionPertExacta ?? act.duracion;
+        const tip = `PERT — O=${act.pertO}, M=${act.pertM}, P=${act.pertP} → ${exact.toFixed(2)} ${u}`;
+        txt += ` <span class="badge-pert" title="${tip}">PERT</span>`;
+    }
+    return txt;
+}
+
+function getDesviacionBaseline(act) {
+    if (!lineaBase) return null;
+    const base = lineaBase.find(b => b.id === act.id);
+    if (!base) return null;
+    return act.EF - base.EF;
+}
+
+function guardarLineaBase() {
+    if (!actividades.length) { alert(t('alertNoActivities')); return; }
+    lineaBase = actividades.map(a => ({
+        id: a.id, ES: a.ES, EF: a.EF,
+        duracion: a.duracion,
+        inicio: getFechaInicioActividad(a),
+        fin: getFechaFinActividad(a)
+    }));
+    renderTabla();
+    alert(t('baselineSaved'));
+    guardarProyecto();
+}
+
+function limpiarLineaBase() {
+    lineaBase = null;
+    renderTabla();
+    guardarProyecto();
+}
+
+function actualizarSelectWhatIf() {
+    const sel = document.getElementById('whatIfActividad');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = actividades.map(a =>
+        `<option value="${a.id}">${a.id} — ${escapeHtmlPdm(a.nombre)}</option>`
+    ).join('');
+    if (prev && actividades.some(a => a.id === parseInt(prev))) sel.value = prev;
+}
+
+function actualizarBannerWhatIf() {
+    const banner = document.getElementById('whatIfBanner');
+    const res = document.getElementById('whatIfResultado');
+    if (banner) banner.style.display = whatIfActivo ? 'block' : 'none';
+    if (banner && whatIfActivo) banner.textContent = t('whatIfActive');
+    if (res && whatIfActivo && actividades.length) {
+        const total = Math.max(...actividades.map(a => a.EF), 0);
+        const act = actividades.find(a => a.id === whatIfActId);
+        res.innerHTML = `<strong>${t('whatIfResult')}:</strong> ${total} ${getUnidadLabel()}`
+            + (act ? ` (${act.nombre} +${whatIfExtra[whatIfActId] || 0})` : '');
+    } else if (res) res.innerHTML = '';
+}
+
+function simularWhatIf() {
+    const id = parseInt(document.getElementById('whatIfActividad')?.value);
+    const dias = parseInt(document.getElementById('whatIfDias')?.value) || 0;
+    if (!id || dias <= 0 || !actividades.some(a => a.id === id)) {
+        alert(t('alertFillFields'));
+        return;
+    }
+    whatIfActivo = true;
+    whatIfActId = id;
+    whatIfExtra = { [id]: dias };
+    calcularTodo();
+}
+
+function cancelarWhatIf() {
+    whatIfActivo = false;
+    whatIfActId = null;
+    whatIfExtra = {};
+    calcularTodo();
+}
+
+function aplicarWhatIf() {
+    if (!whatIfActivo || !whatIfActId) return;
+    const act = actividades.find(a => a.id === whatIfActId);
+    const extra = whatIfExtra[whatIfActId] || 0;
+    if (act && extra > 0) {
+        act.duracion = (act.duracion || 0) + extra;
+        if (act.usarPERT) {
+            act.usarPERT = false;
+            delete act.pertO; delete act.pertM; delete act.pertP; delete act.duracionPertExacta;
+        }
+        act.porcentajes = {};
+        act.porcentajesHolgura = {};
+    }
+    cancelarWhatIf();
+}
+
+const PDM_START_ID = '__inicio__';
+const PDM_END_ID = '__final__';
+
+function construirLayoutPDM() {
+    actividades.forEach(normalizarPredecesoras);
+    const total = Math.max(...actividades.map(a => a.EF), 0);
+    const hasSucc = new Set();
+    actividades.forEach(a => (a.predecesoras || []).forEach(link => hasSucc.add(link.id)));
+
+    const nodos = {};
+    nodos[PDM_START_ID] = {
+        id: PDM_START_ID, nombre: t('pdmStart'), duracion: 0,
+        ES: 0, EF: 0, LS: 0, LF: 0, esPseudo: true, esCritica: false
+    };
+    nodos[PDM_END_ID] = {
+        id: PDM_END_ID, nombre: t('pdmEnd'), duracion: 0,
+        ES: total, EF: total, LS: total, LF: total, esPseudo: true, esCritica: false
+    };
+    actividades.forEach(a => { nodos[a.id] = a; });
+
+    const edges = [];
+    actividades.forEach(a => {
+        if (!a.predecesoras?.length) edges.push({ from: PDM_START_ID, to: a.id, link: null });
+        else a.predecesoras.forEach(link => edges.push({ from: link.id, to: a.id, link }));
+    });
+    actividades.filter(a => !hasSucc.has(a.id)).forEach(a => {
+        edges.push({ from: a.id, to: PDM_END_ID, link: null });
+    });
+    if (!actividades.length) return { nodos, edges, columns: {}, positions: {}, width: 0, height: 0 };
+
+    const columns = { [PDM_START_ID]: 0 };
+    let changed = true;
+    let guard = 0;
+    while (changed && guard++ < actividades.length + 5) {
+        changed = false;
+        edges.forEach(e => {
+            if (columns[e.from] === undefined) return;
+            const next = columns[e.from] + 1;
+            if ((columns[e.to] ?? -1) < next) {
+                columns[e.to] = next;
+                changed = true;
+            }
+        });
+    }
+
+    const byCol = {};
+    Object.entries(columns).forEach(([id, col]) => {
+        if (!byCol[col]) byCol[col] = [];
+        byCol[col].push(id);
+    });
+    Object.values(byCol).forEach(list => list.sort((a, b) => {
+        const na = nodos[a], nb = nodos[b];
+        if (na?.esPseudo && !nb?.esPseudo) return -1;
+        if (nb?.esPseudo && !na?.esPseudo) return 1;
+        return (na?.ES ?? 0) - (nb?.ES ?? 0) || String(a).localeCompare(String(b));
+    }));
+
+    const boxW = 118, boxH = 76, gapX = 48, gapY = 22, pad = 40;
+    const positions = {};
+    const colKeys = Object.keys(byCol).map(Number).sort((a, b) => a - b);
+    let maxRows = 1;
+    colKeys.forEach(c => { maxRows = Math.max(maxRows, byCol[c].length); });
+
+    colKeys.forEach(col => {
+        const ids = byCol[col];
+        const rowH = ids.length * boxH + Math.max(0, ids.length - 1) * gapY;
+        const startY = pad + (maxRows * (boxH + gapY) - gapY - rowH) / 2;
+        ids.forEach((id, ri) => {
+            positions[id] = {
+                x: pad + col * (boxW + gapX),
+                y: startY + ri * (boxH + gapY),
+                w: boxW, h: boxH
+            };
+        });
+    });
+
+    const width = pad * 2 + (colKeys.length * boxW) + Math.max(0, colKeys.length - 1) * gapX;
+    const height = pad * 2 + maxRows * boxH + Math.max(0, maxRows - 1) * gapY;
+    return { nodos, edges, columns, positions, width, height, boxW, boxH };
+}
+
+function dibujarNodoPDM(n, x, y, boxW, boxH, u) {
+    const fill = n.esPseudo ? '#ecfdf5' : (n.esCritica ? '#fee2e2' : (n.esHito ? '#fef3c7' : '#ffffff'));
+    const stroke = n.esPseudo ? '#059669' : (n.esCritica ? '#c8102e' : '#64748b');
+    const sw = n.esCritica || n.esPseudo ? 2.5 : 1.5;
+    let svg = `<rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+    if (n.esPseudo) {
+        svg += `<text x="${x + boxW / 2}" y="${y + boxH / 2 + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#047857">${escapeHtmlPdm(n.nombre)}</text>`;
+        return svg;
+    }
+    svg += `<text x="${x + 8}" y="${y + 13}" font-size="9" font-weight="700" fill="#0369a1">${n.ES ?? 0}</text>`;
+    svg += `<text x="${x + boxW - 8}" y="${y + 13}" font-size="9" font-weight="700" fill="#0369a1" text-anchor="end">${n.EF ?? 0}</text>`;
+    svg += `<text x="${x + 8}" y="${y + boxH - 5}" font-size="9" font-weight="700" fill="#6d28d9">${n.LS ?? 0}</text>`;
+    svg += `<text x="${x + boxW - 8}" y="${y + boxH - 5}" font-size="9" font-weight="700" fill="#6d28d9" text-anchor="end">${n.LF ?? 0}</text>`;
+    svg += `<line x1="${x + 5}" y1="${y + 18}" x2="${x + boxW - 5}" y2="${y + 18}" stroke="#e2e8f0" stroke-width="1"/>`;
+    svg += `<line x1="${x + 5}" y1="${y + boxH - 16}" x2="${x + boxW - 5}" y2="${y + boxH - 16}" stroke="#e2e8f0" stroke-width="1"/>`;
+    const label = n.esHito ? `${n.id} ◆` : `${n.id}`;
+    svg += `<text x="${x + boxW / 2}" y="${y + 32}" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">${label}</text>`;
+    const nombre = escapeHtmlPdm((n.nombre || '').length > 13 ? n.nombre.slice(0, 12) + '…' : n.nombre);
+    svg += `<text x="${x + boxW / 2}" y="${y + 46}" text-anchor="middle" font-size="8" fill="#475569">${nombre}</text>`;
+    const durTxt = n.esHito ? t('badgeMilestone') : `${getDuracionCPM(n)} ${u}`;
+    svg += `<text x="${x + boxW / 2}" y="${y + 60}" text-anchor="middle" font-size="8" fill="#64748b">${durTxt}</text>`;
+    return svg;
+}
+
+function generarSvgDiagramaPDM(compact = false) {
+    if (!actividades.length) return '';
+    const layout = construirLayoutPDM();
+    const { nodos, edges, positions, width, height } = layout;
+    const u = getUnidadLabel();
+    const uid = 'pdm' + Math.random().toString(36).slice(2, 8);
+    let svg = `<svg viewBox="0 0 ${width} ${height + (compact ? 0 : 28)}" class="pdm-svg" xmlns="http://www.w3.org/2000/svg">`;
+    svg += `<defs><marker id="${uid}Arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748b"/></marker>`;
+    svg += `<marker id="${uid}ArrCrit" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#c8102e"/></marker></defs>`;
+
+    edges.forEach(e => {
+        const from = positions[e.from], to = positions[e.to];
+        if (!from || !to) return;
+        const fn = nodos[e.from], tn = nodos[e.to];
+        const critica = fn?.esCritica && tn?.esCritica && !fn?.esPseudo && !tn?.esPseudo;
+        const x1 = from.x + from.w, y1 = from.y + from.h / 2;
+        const x2 = to.x, y2 = to.y + to.h / 2;
+        const midX = (x1 + x2) / 2;
+        const stroke = critica ? '#c8102e' : '#94a3b8';
+        const sw = critica ? 2.2 : 1.5;
+        svg += `<path d="M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}" fill="none" stroke="${stroke}" stroke-width="${sw}" marker-end="url(#${uid}${critica ? 'ArrCrit' : 'Arr'})"/>`;
+        if (e.link?.tipo && e.link.tipo !== 'FC') {
+            svg += `<text x="${midX}" y="${(y1 + y2) / 2 - 4}" text-anchor="middle" font-size="7" fill="#c8102e">${e.link.tipo}${e.link.lag ? (e.link.lag > 0 ? '+' + e.link.lag : e.link.lag) : ''}</text>`;
+        }
+    });
+
+    Object.entries(positions).forEach(([id, pos]) => {
+        const n = nodos[id];
+        if (n) svg += dibujarNodoPDM(n, pos.x, pos.y, pos.w, pos.h, u);
+    });
+
+    if (!compact) {
+        const ly = height + 10;
+        svg += `<text x="40" y="${ly}" font-size="8" fill="#64748b">${t('pdmLegendES')} · ${t('pdmLegendEF')}</text>`;
+        svg += `<text x="40" y="${ly + 12}" font-size="8" fill="#64748b">${t('pdmLegendLS')} · ${t('pdmLegendLF')}</text>`;
+    }
+    svg += '</svg>';
+    return svg;
+}
+
+function renderDiagramaPDM() {
+    const container = document.getElementById('pdmContainer');
+    if (!container) return;
+    if (!actividades.length) {
+        container.innerHTML = `<p class="mensaje-vacio">${t('pdmEmpty')}</p>`;
+        return;
+    }
+    container.innerHTML = generarSvgDiagramaPDM(false);
+}
+
+function togglePanelPERT(modo) {
+    const esEdit = modo === 'edit';
+    const usar = document.getElementById(esEdit ? 'editUsarPERT' : 'usarPERT');
+    const panel = document.getElementById(esEdit ? 'editPanelPERT' : 'panelPERT');
+    const durWrap = document.getElementById(esEdit ? 'editDuracionWrap' : 'duracionWrap');
+    if (!usar || !panel) return;
+    const activo = usar.checked;
+    panel.style.display = activo ? 'grid' : 'none';
+    if (durWrap) durWrap.style.display = activo ? 'none' : 'block';
+    if (activo) actualizarPreviewPERT(modo);
+}
+
+function actualizarPreviewPERT(modo) {
+    const esEdit = modo === 'edit';
+    const o = parseFloat(document.getElementById(esEdit ? 'editPertO' : 'pertO')?.value);
+    const m = parseFloat(document.getElementById(esEdit ? 'editPertM' : 'pertM')?.value);
+    const p = parseFloat(document.getElementById(esEdit ? 'editPertP' : 'pertP')?.value);
+    const el = document.getElementById(esEdit ? 'editPertResultado' : 'pertResultado');
+    if (!el) return;
+    if (o > 0 && m > 0 && p > 0) {
+        const exact = (o + 4 * m + p) / 6;
+        el.textContent = `${calcularDuracionPERT(o, m, p)} ${getUnidadLabel()} (${t('pertResult')}: ${exact.toFixed(2)})`;
+    } else {
+        el.textContent = '—';
+    }
+}
+
+function leerDuracionDesdeFormulario(modo) {
+    const esEdit = modo === 'edit';
+    const esHito = document.getElementById(esEdit ? 'editEsHito' : 'esHito')?.checked;
+    if (esHito) return { ok: true, esHito: true, duracion: 0, usarPERT: false };
+    const usarPERT = document.getElementById(esEdit ? 'editUsarPERT' : 'usarPERT')?.checked;
+    if (usarPERT) {
+        const pertO = parseFloat(document.getElementById(esEdit ? 'editPertO' : 'pertO')?.value);
+        const pertM = parseFloat(document.getElementById(esEdit ? 'editPertM' : 'pertM')?.value);
+        const pertP = parseFloat(document.getElementById(esEdit ? 'editPertP' : 'pertP')?.value);
+        if (!(pertO > 0 && pertM > 0 && pertP > 0)) return { ok: false };
+        return {
+            ok: true,
+            usarPERT: true,
+            duracion: calcularDuracionPERT(pertO, pertM, pertP),
+            pertO, pertM, pertP,
+            duracionPertExacta: (pertO + 4 * pertM + pertP) / 6
+        };
+    }
+    const duracion = parseFloat(document.getElementById(esEdit ? 'editDuracion' : 'duracion')?.value);
+    if (!(duracion > 0)) return { ok: false };
+    return { ok: true, usarPERT: false, duracion };
+}
+
+function aplicarDatosDuracionActividad(act, datos) {
+    act.esHito = !!datos.esHito;
+    act.duracion = datos.duracion;
+    act.usarPERT = !!datos.usarPERT && !act.esHito;
+    if (act.esHito) {
+        act.duracion = 0;
+        act.usarPERT = false;
+        delete act.pertO; delete act.pertM; delete act.pertP; delete act.duracionPertExacta;
+    } else if (act.usarPERT) {
+        act.pertO = datos.pertO;
+        act.pertM = datos.pertM;
+        act.pertP = datos.pertP;
+        act.duracionPertExacta = datos.duracionPertExacta;
+    } else {
+        delete act.pertO;
+        delete act.pertM;
+        delete act.pertP;
+        delete act.duracionPertExacta;
+    }
+}
+
+function limpiarFormularioActividad() {
+    document.getElementById('actividad').value = '';
+    document.getElementById('wbsCodigo').value = '';
+    document.getElementById('duracion').value = '';
+    document.getElementById('presupuesto').value = '';
+    document.getElementById('dependenciaTexto').value = '';
+    const esHito = document.getElementById('esHito');
+    if (esHito) { esHito.checked = false; }
+    const usarPERT = document.getElementById('usarPERT');
+    if (usarPERT) { usarPERT.checked = false; }
+    toggleOpcionesActividad('add');
+    ['pertO', 'pertM', 'pertP'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    actualizarPreviewPERT('add');
+    const selDep = document.getElementById('dependenciaSelect');
+    if (selDep) Array.from(selDep.options).forEach(o => { o.selected = false; });
+}
+
 function calcularESDesdePredecesora(act, link, predsMap) {
     const p = predsMap[link.id];
     if (!p) return 0;
     const lag = link.lag || 0;
     switch (link.tipo) {
         case 'CC': return p.ES + lag;
-        case 'FF': return p.EF + lag - act.duracion;
-        case 'CF': return p.ES + lag - act.duracion;
+        case 'FF': return p.EF + lag - getDuracionCPM(act);
+        case 'CF': return p.ES + lag - getDuracionCPM(act);
         default: return p.EF + lag;
     }
 }
@@ -315,9 +791,9 @@ function calcularESDesdePredecesora(act, link, predsMap) {
 function calcularLFDesdeSucesor(act, link, suc) {
     const lag = link.lag || 0;
     switch (link.tipo) {
-        case 'CC': return suc.LS - lag + act.duracion;
+        case 'CC': return suc.LS - lag + getDuracionCPM(act);
         case 'FF': return suc.LF - lag;
-        case 'CF': return suc.LF - lag + act.duracion;
+        case 'CF': return suc.LF - lag + getDuracionCPM(act);
         default: return suc.LS - lag;
     }
 }
@@ -423,7 +899,9 @@ function getFechaFinActividad(a) {
 
 function getPVPeriodo(act, periodo) {
     if (periodo < act.ES || periodo >= act.EF) return 0;
-    return (parseFloat(act.presupuesto) || 0) / act.duracion;
+    const dur = getDuracionCPM(act);
+    if (dur <= 0) return 0;
+    return (parseFloat(act.presupuesto) || 0) / dur;
 }
 
 function getETCEscenario(key, bac, ev, cpi, spi) {
@@ -691,8 +1169,20 @@ function abrirModalEditar(id) {
     normalizarPredecesoras(act);
     document.getElementById('editActId').value = id;
     document.getElementById('editNombre').value = act.nombre;
+    document.getElementById('editWbsCodigo').value = act.wbs || '';
     document.getElementById('editDuracion').value = act.duracion;
     document.getElementById('editPresupuesto').value = act.presupuesto;
+    const editEsHito = document.getElementById('editEsHito');
+    if (editEsHito) editEsHito.checked = !!act.esHito;
+    const editUsarPERT = document.getElementById('editUsarPERT');
+    if (editUsarPERT) {
+        editUsarPERT.checked = !!act.usarPERT;
+        document.getElementById('editPertO').value = act.pertO ?? '';
+        document.getElementById('editPertM').value = act.pertM ?? '';
+        document.getElementById('editPertP').value = act.pertP ?? '';
+    }
+    toggleOpcionesActividad('edit');
+    actualizarPreviewPERT('edit');
     const { lista, texto } = separarPredecesorasParaUI(act.predecesoras);
     llenarSelectPredecesoras('editPredecesorasSelect', id, lista.map(id => ({ id })));
     document.getElementById('editPredecesorasTexto').value = texto;
@@ -708,13 +1198,14 @@ function guardarEdicionActividad() {
     const act = actividades.find(a => a.id === id);
     if (!act) return;
     const nombre = document.getElementById('editNombre').value.trim();
-    const duracion = parseInt(document.getElementById('editDuracion').value);
-    if (!nombre || !duracion) {
-        alert(t('alertFillFields'));
+    const datosDur = leerDuracionDesdeFormulario('edit');
+    if (!nombre || !datosDur.ok) {
+        alert(datosDur.usarPERT === undefined && !datosDur.ok ? t('alertPERTInvalid') : t('alertFillFields'));
         return;
     }
     act.nombre = nombre;
-    act.duracion = duracion;
+    act.wbs = document.getElementById('editWbsCodigo')?.value.trim() || '';
+    aplicarDatosDuracionActividad(act, datosDur);
     act.presupuesto = parseFloat(document.getElementById('editPresupuesto').value) || 0;
     act.predecesoras = combinarPredecesoras('editPredecesorasSelect', 'editPredecesorasTexto');
     act.porcentajes = {};
@@ -731,7 +1222,8 @@ function getEstadoProyecto() {
         nombreProyecto: document.getElementById('nombreProyecto')?.value || '',
         unidadTiempo, modoAvance, idioma, moneda, periodosEVM, diaCorte, escenarioETC,
         holguraPorcentaje, trabajarEnHolgura, calendarioActivo, diasLaborables,
-        diasNoLaborablesCustom, bitacoraNotas, bitacoraNotaActiva, bitacoraSiguienteId
+        diasNoLaborablesCustom, bitacoraNotas, bitacoraNotaActiva, bitacoraSiguienteId,
+        lineaBase, whatIfActivo, whatIfActId, whatIfExtra
     };
 }
 
@@ -763,6 +1255,13 @@ function aplicarEstadoProyecto(estado) {
         bitacoraNotaActiva = 1;
         bitacoraSiguienteId = 2;
     }
+    lineaBase = estado.lineaBase || null;
+    whatIfActivo = !!estado.whatIfActivo;
+    whatIfActId = estado.whatIfActId || null;
+    whatIfExtra = estado.whatIfExtra || {};
+    actividades.forEach(a => {
+        if (a.esHito) a.duracion = 0;
+    });
     document.getElementById('unidadTiempo').value = unidadTiempo;
     document.getElementById('modoAvance').value = modoAvance;
     document.getElementById('idioma').value = idioma;
@@ -899,6 +1398,10 @@ function inicializarProyectoVacio() {
     calendarioActivo = false;
     diasLaborables = [1, 2, 3, 4, 5];
     diasNoLaborablesCustom = [];
+    lineaBase = null;
+    whatIfActivo = false;
+    whatIfActId = null;
+    whatIfExtra = {};
     bitacoraNotas = [{ id: 1, titulo: idioma === 'es' ? 'Nota 1' : 'Note 1', html: '' }];
     bitacoraNotaActiva = 1;
     bitacoraSiguienteId = 2;
@@ -998,6 +1501,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     document.getElementById('modalEditar')?.addEventListener('click', e => { if (e.target.id === 'modalEditar') cerrarModalEditar(); });
+    toggleOpcionesActividad('add');
     inicializarCalendarioUI();
     inicializarBitacora();
     iniciarAutoSave();
@@ -1095,17 +1599,18 @@ function distribuirPorcentajesIgual(act) {
 
 function agregarActividad() {
     const nombre = document.getElementById('actividad').value.trim();
-    const duracion = parseInt(document.getElementById('duracion').value);
     const presupuesto = parseFloat(document.getElementById('presupuesto').value) || 0;
     const predecesoras = combinarPredecesoras('dependenciaSelect', 'dependenciaTexto');
-    if (!nombre || !duracion || !projectStartDate) {
-        alert(t('alertFillFields'));
+    const datosDur = leerDuracionDesdeFormulario('add');
+    if (!nombre || !datosDur.ok || !projectStartDate) {
+        alert(!datosDur.ok && document.getElementById('usarPERT')?.checked ? t('alertPERTInvalid') : t('alertFillFields'));
         return;
     }
-    actividades.push({
+    const nueva = {
         id: actividades.length + 1,
         nombre,
-        duracion,
+        wbs: document.getElementById('wbsCodigo')?.value.trim() || '',
+        duracion: datosDur.duracion,
         presupuesto,
         predecesoras,
         porcentajes: {},
@@ -1116,13 +1621,10 @@ function agregarActividad() {
         LF: 0,
         holgura: 0,
         esCritica: false
-    });
-    document.getElementById('actividad').value = '';
-    document.getElementById('duracion').value = '';
-    document.getElementById('presupuesto').value = '';
-    document.getElementById('dependenciaTexto').value = '';
-    const selDep = document.getElementById('dependenciaSelect');
-    if (selDep) Array.from(selDep.options).forEach(o => { o.selected = false; });
+    };
+    aplicarDatosDuracionActividad(nueva, datosDur);
+    actividades.push(nueva);
+    limpiarFormularioActividad();
     actualizarSelectDependencias();
     calcularTodo();
 }
@@ -1218,12 +1720,17 @@ function calcularTodo() {
         actualizarFeriados(true);
         renderTabla();
         renderGantt();
+        renderDiagramaPDM();
+        actualizarSelectWhatIf();
+        actualizarBannerWhatIf();
         document.getElementById('rutaCritica').textContent = t('criticalPathEmpty');
         document.getElementById('rutaCritica')?.classList.remove('resaltada');
         generarPeriodosEVM();
         generarAnalisisGerencial();
         return;
     }
+    normalizarTodasActividadesPERT();
+    actividades.forEach(a => { if (a.esHito) a.duracion = 0; });
     calcularForwardPass();
     calcularBackwardPass();
     calcularHolguraYCritica();
@@ -1239,6 +1746,9 @@ function calcularTodo() {
     calcularSumaGantt();
     renderTabla();
     renderGantt();
+    renderDiagramaPDM();
+    actualizarSelectWhatIf();
+    actualizarBannerWhatIf();
     mostrarRutaCritica();
     generarPeriodosEVM();
     generarAnalisisGerencial();
@@ -1260,7 +1770,7 @@ function calcularForwardPass() {
                     .map(link => calcularESDesdePredecesora(act, link, predsMap));
                 if (vals.length === act.predecesoras.length) ES = Math.max(...vals, 0);
             }
-            const EF = ES + act.duracion;
+            const EF = ES + getDuracionCPM(act);
             if (act.ES !== ES || act.EF !== EF) {
                 act.ES = ES;
                 act.EF = EF;
@@ -1274,7 +1784,7 @@ function calcularBackwardPass() {
     const total = Math.max(...actividades.map(a => a.EF), 0);
     actividades.forEach(a => {
         a.LF = total;
-        a.LS = total - a.duracion;
+        a.LS = total - getDuracionCPM(a);
     });
     let c = true, g = 0;
     while (c && g++ < 100) {
@@ -1293,7 +1803,7 @@ function calcularBackwardPass() {
                 LF = Math.min(...sucLinks.map(({ suc, link }) => calcularLFDesdeSucesor(act, link, suc)));
             }
             LF = Math.min(LF, total);
-            const LS = LF - act.duracion;
+            const LS = LF - getDuracionCPM(act);
             if (act.LF !== LF || act.LS !== LS) {
                 act.LF = LF;
                 act.LS = LS;
@@ -1342,17 +1852,27 @@ function renderTabla() {
         if (holguraPorcentaje && totalDur > 0) {
             holguraTxt = `${act.holgura} (${((act.holgura / totalDur) * 100).toFixed(1)}%)`;
         }
+        const desv = getDesviacionBaseline(act);
+        let desvTxt = t('noBaseline');
+        if (desv !== null) {
+            const cls = desv > 0 ? 'txt-bad' : (desv < 0 ? 'txt-ok' : '');
+            desvTxt = `<span class="${cls}">${desv > 0 ? '+' : ''}${desv}</span>`;
+        }
         const tr = document.createElement('tr');
         if (act.esCritica) tr.classList.add('fila-critica');
+        if (act.esHito) tr.classList.add('fila-hito');
         tr.innerHTML = `
-            <td>${act.id}</td><td>${act.nombre}</td>
-            <td>${act.duracion} ${getUnidadLabel()}</td>
+            <td>${act.id}</td>
+            <td>${act.wbs ? `<span class="wbs-tag">${act.wbs}</span>` : '—'}</td>
+            <td>${act.esHito ? '◆ ' : ''}${act.nombre}</td>
+            <td>${formatearDuracionActividad(act)}</td>
             <td><input type="number" min="0" step="0.01" value="${act.presupuesto}" class="input-tabla"
                 onchange="actualizarPresupuesto(${act.id}, this.value)"></td>
             <td>${preds}</td>
             <td>${getFechaInicioActividad(act)}</td><td>${getFechaFinActividad(act)}</td>
             <td>${act.ES}</td><td>${act.EF}</td><td>${act.LS}</td><td>${act.LF}</td>
             <td class="${act.esCritica ? 'holgura-cero' : 'holgura-normal'}">${holguraTxt}</td>
+            <td>${desvTxt}</td>
             <td>${act.esCritica ? `<span class="badge-critica">${t('statusCritical')}</span>` : `<span class="badge-normal">${t('statusNormal')}</span>`}</td>
             <td class="${pctOk ? 'pct-ok' : 'pct-error'}">${modoAvance === 'real' ? '-' : sumPct.toFixed(1) + '% ' + (pctOk ? '✓' : '✗')}</td>
             <td>
@@ -1409,7 +1929,7 @@ function renderGantt() {
 
     actividades.forEach(act => {
         const filaCrit = act.esCritica ? ' gantt-fila-critica' : '';
-        html += `<tr class="${filaCrit}"><td class="gantt-sticky">${act.id} - ${act.nombre}</td><td>${act.duracion}</td><td class="gantt-ppto">${formatearMoneda(act.presupuesto)}</td>`;
+        html += `<tr class="${filaCrit}${act.esHito ? ' gantt-fila-hito' : ''}"><td class="gantt-sticky">${act.esHito ? '◆ ' : ''}${act.id} - ${act.nombre}</td><td>${getDuracionCPM(act)}</td><td class="gantt-ppto">${formatearMoneda(act.presupuesto)}</td>`;
         for (let i = 0; i < numCols; i++) {
             const periodo = usarCal ? getPeriodoDesdeIndiceGantt(i) : i;
             const fCal = usarCal ? diasCalendarioGantt[i] : null;
@@ -1439,6 +1959,8 @@ function renderGantt() {
                 } else {
                     html += `<td class="gantt-celda-holgura${clsExtra}"></td>`;
                 }
+            } else if (periodo >= 0 && act.esHito && periodo === act.ES) {
+                html += `<td class="gantt-celda-hito${clsExtra}" title="${t('badgeMilestone')}">◆</td>`;
             } else {
                 html += `<td class="gantt-celda-vacia${clsExtra}"></td>`;
             }
@@ -2417,9 +2939,7 @@ function exportarBitacoraWord() {
 }
 
 /* --- Informe Ejecutivo --- */
-function generarInformeEjecutivo() {
-    const el = document.getElementById('contenidoInformeEjecutivo');
-    if (!el) return;
+function calcularMetricasInforme() {
     const { pv, ev, ac, bac } = getDatosCorte();
     const spi = pv > 0 ? ev / pv : 0;
     const cpi = ac > 0 ? ev / ac : 0;
@@ -2431,69 +2951,235 @@ function generarInformeEjecutivo() {
     const vacSel = bac - eacSel;
     const totalDur = Math.max(...actividades.map(a => a.EF), 0);
     const critCount = actividades.filter(a => a.esCritica).length;
+    const avanceCronPct = (spi - 1) * 100;
+    const avanceFisicoPct = bac > 0 ? (ev / bac) * 100 : 0;
+    const avancePlanificadoPct = bac > 0 ? (pv / bac) * 100 : 0;
+    const sobrecostoPct = ev > 0 ? ((ac - ev) / ev) * 100 : 0;
+    const tiempoEstimado = spi > 0 ? totalDur / spi : totalDur;
+    const retraso = Math.max(0, tiempoEstimado - totalDur);
+    const proy = getProyeccionProyecto();
+    const crit = actividades.filter(a => a.esCritica).sort((a, b) => a.ES - b.ES);
+    const escenarios = ['atipico', 'tipico', 'probable'].map(key => {
+        const etc = getETCEscenario(key, bac, ev, cpi, spi);
+        const eac = ac + etc;
+        return { key, etc, eac, vac: bac - eac };
+    });
+    return {
+        pv, ev, ac, bac, spi, cpi, sv, cv, tcpiBac, etcSel, eacSel, vacSel,
+        totalDur, critCount, avanceCronPct, avanceFisicoPct, avancePlanificadoPct,
+        sobrecostoPct, tiempoEstimado, retraso, proy, crit, escenarios
+    };
+}
+
+function getEstadoProyectoInforme(spi, cpi) {
+    if (spi < 1 && cpi < 1) return { emoji: '🔴', clase: 'informe-estado-critico', es: 'Requiere atención urgente', en: 'Needs urgent attention' };
+    if (spi < 1 || cpi < 1) return { emoji: '🟡', clase: 'informe-estado-alerta', es: 'En vigilancia', en: 'Under watch' };
+    return { emoji: '🟢', clase: 'informe-estado-ok', es: 'Dentro de lo planificado', en: 'On track' };
+}
+
+function getTextoRutaCriticaInforme(crit) {
+    if (!crit.length) return idioma === 'es' ? 'Sin actividades críticas definidas.' : 'No critical activities defined.';
+    let r = t('start');
+    crit.forEach(a => { r += ` → ${a.id} (${a.nombre})`; });
+    return `${r} → ${t('end')}`;
+}
+
+function generarInformeEjecutivo() {
+    const el = document.getElementById('contenidoInformeEjecutivo');
+    if (!el) return;
+    if (!actividades.length) {
+        el.innerHTML = `<p class="mensaje-vacio">${t('valNoActivities')}</p>`;
+        return;
+    }
+
+    const m = calcularMetricasInforme();
     const fecha = new Date().toLocaleDateString(idioma === 'es' ? 'es-PE' : 'en-US');
     const periodoLabel = getEtiquetaTiempo(diaCorte);
-    const avanceCronPct = (spi - 1) * 100;
-    const sobrecostoPct = ev > 0 ? ((ac - ev) / ev) * 100 : 0;
-    const proy = getProyeccionProyecto();
+    const estado = getEstadoProyectoInforme(m.spi, m.cpi);
+    const unidad = getUnidadLabel();
+    const escSel = m.escenarios.find(e => e.key === escenarioETC) || m.escenarios[2];
+    const nombreEsc = escenarioETC === 'atipico'
+        ? (idioma === 'es' ? 'optimista (gasto restante según plan)' : 'optimistic')
+        : escenarioETC === 'tipico'
+            ? (idioma === 'es' ? 'moderado (mantiene eficiencia actual)' : 'moderate')
+            : (idioma === 'es' ? 'conservador (considera retrasos y sobrecostos)' : 'conservative');
+
+    const txtTiempo = m.spi >= 1
+        ? (idioma === 'es'
+            ? `La obra va <strong>a tiempo o adelantada</strong>. Se ha completado el ${m.avanceFisicoPct.toFixed(1)}% del trabajo total, cuando el plan indicaba ${m.avancePlanificadoPct.toFixed(1)}%.`
+            : `Work is <strong>on or ahead of schedule</strong>. ${m.avanceFisicoPct.toFixed(1)}% complete vs ${m.avancePlanificadoPct.toFixed(1)}% planned.`)
+        : (idioma === 'es'
+            ? `La obra va <strong>retrasada</strong> respecto al plan. Solo se ha completado el ${m.avanceFisicoPct.toFixed(1)}% del trabajo, cuando debía estar en ${m.avancePlanificadoPct.toFixed(1)}%. Esto equivale a un retraso aproximado de <strong>${m.retraso.toFixed(1)} ${unidad}</strong> si no se corrige el ritmo.`
+            : `Work is <strong>behind schedule</strong>. ${m.avanceFisicoPct.toFixed(1)}% complete vs ${m.avancePlanificadoPct.toFixed(1)}% planned. Estimated delay: <strong>${m.retraso.toFixed(1)} ${unidad}</strong>.`);
+
+    const txtCosto = m.cpi >= 1
+        ? (idioma === 'es'
+            ? `El gasto está <strong>controlado</strong>. Por cada ${moneda} 1.00 invertido se obtiene ${moneda} ${m.cpi.toFixed(2)} de trabajo completado.`
+            : `Spending is <strong>under control</strong>. Each ${moneda} 1.00 spent yields ${moneda} ${m.cpi.toFixed(2)} of completed work.`)
+        : (idioma === 'es'
+            ? `Hay <strong>sobrecosto</strong>. Se han gastado ${formatearMoneda(m.ac)} pero solo se ha completado trabajo equivalente a ${formatearMoneda(m.ev)} (aprox. ${m.sobrecostoPct.toFixed(1)}% por encima de lo esperado).`
+            : `<strong>Over budget</strong>. Spent ${formatearMoneda(m.ac)} but only ${formatearMoneda(m.ev)} of work completed (~${m.sobrecostoPct.toFixed(1)}% overrun).`);
+
+    const txtProyeccion = m.vacSel >= 0
+        ? (idioma === 'es'
+            ? `Se estima terminar con un costo total de <strong>${formatearMoneda(m.eacSel)}</strong>, lo que representa un ahorro de ${formatearMoneda(m.vacSel)} respecto al presupuesto aprobado (${formatearMoneda(m.bac)}).`
+            : `Estimated final cost: <strong>${formatearMoneda(m.eacSel)}</strong>, saving ${formatearMoneda(m.vacSel)} vs approved budget (${formatearMoneda(m.bac)}).`)
+        : (idioma === 'es'
+            ? `Se estima terminar con un costo total de <strong>${formatearMoneda(m.eacSel)}</strong>, es decir <strong>${formatearMoneda(Math.abs(m.vacSel))} por encima</strong> del presupuesto aprobado (${formatearMoneda(m.bac)}).`
+            : `Estimated final cost: <strong>${formatearMoneda(m.eacSel)}</strong>, <strong>${formatearMoneda(Math.abs(m.vacSel))} over</strong> approved budget (${formatearMoneda(m.bac)}).`);
 
     el.innerHTML = `
         <div class="informe-portada">
-            <h2>${getNombreProyecto()}</h2>
+            <h2>${escapeHtmlPdm(getNombreProyecto())}</h2>
             <p>${t('executiveReport')} — ${fecha}</p>
-            <p>${idioma === 'es' ? 'Periodo de corte' : 'Cutoff period'}: <strong>${periodoLabel}</strong></p>
+            <p>${idioma === 'es' ? 'Información al' : 'As of'}: <strong>${periodoLabel}</strong></p>
+            <div class="informe-estado-badge ${estado.clase}">${estado.emoji} ${idioma === 'es' ? estado.es : estado.en}</div>
         </div>
+
         <div class="informe-seccion">
-            <h3>${idioma === 'es' ? 'Resumen Ejecutivo' : 'Executive Summary'}</h3>
+            <h3>${idioma === 'es' ? 'Resumen para la dirección' : 'Management Summary'}</h3>
             <p>${idioma === 'es'
-                ? `El proyecto "${getNombreProyecto()}" cuenta con ${actividades.length} actividades, duración planificada de ${totalDur} ${getUnidadLabel()} y BAC de ${formatearMoneda(bac)}. Al ${periodoLabel.toLowerCase()}, el SPI es ${spi.toFixed(3)} y el CPI es ${cpi.toFixed(3)}.`
-                : `Project "${getNombreProyecto()}" has ${actividades.length} activities, planned duration ${totalDur} ${getUnidadLabel()} and BAC ${formatearMoneda(bac)}. At ${periodoLabel}, SPI is ${spi.toFixed(3)} and CPI is ${cpi.toFixed(3)}.`}
+                ? `El proyecto "${escapeHtmlPdm(getNombreProyecto())}" tiene ${actividades.length} actividades con una duración planificada de ${m.totalDur} ${unidad} y un presupuesto total de ${formatearMoneda(m.bac)}.`
+                : `Project "${escapeHtmlPdm(getNombreProyecto())}" has ${actividades.length} activities, planned duration ${m.totalDur} ${unidad} and total budget ${formatearMoneda(m.bac)}.`}
             </p>
-            <div class="informe-kpis">
-                <div class="informe-kpi"><div class="etiq">BAC</div><div class="valor">${formatearMoneda(bac)}</div></div>
-                <div class="informe-kpi"><div class="etiq">PV</div><div class="valor">${formatearMoneda(pv)}</div></div>
-                <div class="informe-kpi"><div class="etiq">EV</div><div class="valor">${formatearMoneda(ev)}</div></div>
-                <div class="informe-kpi"><div class="etiq">AC</div><div class="valor">${formatearMoneda(ac)}</div></div>
-                <div class="informe-kpi"><div class="etiq">SPI</div><div class="valor">${spi.toFixed(3)}</div></div>
-                <div class="informe-kpi"><div class="etiq">CPI</div><div class="valor">${cpi.toFixed(3)}</div></div>
-                <div class="informe-kpi"><div class="etiq">TCPI (BAC)</div><div class="valor">${tcpiBac.toFixed(3)}</div></div>
-                <div class="informe-kpi"><div class="etiq">EAC</div><div class="valor">${formatearMoneda(eacSel)}</div></div>
+            <p>${txtTiempo}</p>
+            <p>${txtCosto}</p>
+            <p>${txtProyeccion}</p>
+        </div>
+
+        <div class="informe-seccion">
+            <h3>${idioma === 'es' ? 'Indicadores principales' : 'Key Indicators'}</h3>
+            <p class="informe-nota">${idioma === 'es'
+                ? 'Cifras en lenguaje sencillo. Los valores técnicos se muestran entre paréntesis solo como referencia.'
+                : 'Plain-language figures. Technical values shown in parentheses for reference only.'}</p>
+            <div class="informe-kpi-grid">
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? 'Presupuesto total' : 'Total budget'}</div>
+                    <div class="valor">${formatearMoneda(m.bac)}</div>
+                </div>
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? 'Debería haberse gastado' : 'Should have spent'}</div>
+                    <div class="valor">${formatearMoneda(m.pv)}</div>
+                    <small>${idioma === 'es' ? 'Según el plan al ' + periodoLabel.toLowerCase() : 'Per plan at ' + periodoLabel}</small>
+                </div>
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? 'Trabajo completado' : 'Work completed'}</div>
+                    <div class="valor">${formatearMoneda(m.ev)}</div>
+                    <small>${m.avanceFisicoPct.toFixed(1)}% ${idioma === 'es' ? 'del total' : 'of total'}</small>
+                </div>
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? 'Dinero gastado' : 'Money spent'}</div>
+                    <div class="valor">${formatearMoneda(m.ac)}</div>
+                </div>
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? '¿Vamos a tiempo?' : 'On schedule?'}</div>
+                    <div class="valor ${m.spi >= 1 ? 'txt-ok' : 'txt-bad'}">${m.spi >= 1 ? (idioma === 'es' ? 'Sí' : 'Yes') : (idioma === 'es' ? 'No' : 'No')}</div>
+                    <small>${idioma === 'es' ? 'Ritmo: ' + (m.spi * 100).toFixed(0) + '% del plan' : 'Pace: ' + (m.spi * 100).toFixed(0) + '% of plan'}</small>
+                </div>
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? '¿Gastamos bien?' : 'Spending efficiently?'}</div>
+                    <div class="valor ${m.cpi >= 1 ? 'txt-ok' : 'txt-bad'}">${m.cpi >= 1 ? (idioma === 'es' ? 'Sí' : 'Yes') : (idioma === 'es' ? 'No' : 'No')}</div>
+                    <small>${idioma === 'es' ? 'Por cada ' + moneda + ' 1 invertido → ' + moneda + ' ' + m.cpi.toFixed(2) + ' de obra' : 'Per 1 spent → ' + m.cpi.toFixed(2) + ' work'}</small>
+                </div>
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? 'Costo final estimado' : 'Estimated final cost'}</div>
+                    <div class="valor">${formatearMoneda(m.eacSel)}</div>
+                    <small>${idioma === 'es' ? 'Escenario ' + nombreEsc : nombreEsc + ' scenario'}</small>
+                </div>
+                <div class="informe-kpi">
+                    <div class="etiq">${idioma === 'es' ? 'Diferencia vs presupuesto' : 'Budget difference'}</div>
+                    <div class="valor ${m.vacSel >= 0 ? 'txt-ok' : 'txt-bad'}">${formatearMoneda(m.vacSel)}</div>
+                    <small>${m.vacSel >= 0 ? (idioma === 'es' ? 'Ahorro proyectado' : 'Projected savings') : (idioma === 'es' ? 'Sobrecosto proyectado' : 'Projected overrun')}</small>
+                </div>
             </div>
         </div>
+
         <div class="informe-seccion">
-            <h3>${idioma === 'es' ? 'Cronograma y Ruta Crítica' : 'Schedule and Critical Path'}</h3>
+            <h3>${idioma === 'es' ? 'Avance de la obra (tiempo)' : 'Schedule Progress'}</h3>
+            <p>${txtTiempo}</p>
+            ${m.proy ? `<p>${t('totalDuration')}: <strong>${m.totalDur} ${unidad}</strong>. ${t('projectionEndDate')}: <strong>${formatearFecha(m.proy.fechaFin)}</strong>${m.proy.diasNoLaborables ? `. ${t('projectionNonWork')}: ${m.proy.diasNoLaborables}.` : ''}</p>` : ''}
+            <p><strong>${t('criticalPath')}:</strong> ${getTextoRutaCriticaInforme(m.crit)}</p>
             <p>${idioma === 'es'
-                ? `Desviación de cronograma (SV): ${formatearMoneda(sv)}. Avance cronograma: ${avanceCronPct.toFixed(1)}%. Actividades críticas: ${critCount}. ${spi >= 1 ? 'Avance acorde o adelantado al plan.' : 'Retraso detectado; revisar ruta crítica.'}`
-                : `SV: ${formatearMoneda(sv)}. Schedule advance: ${avanceCronPct.toFixed(1)}%. Critical: ${critCount}.`}
-            </p>
-            ${proy ? `<p>${t('totalDuration')}: ${proy.diasLaborables} ${getUnidadLabel()}. ${t('projectionDays')}: ${proy.diasCalendario}. ${t('projectionEndDate')}: ${formatearFecha(proy.fechaFin)}.${proy.diasNoLaborables ? ` ${t('projectionNonWork')}: ${proy.diasNoLaborables}.` : ''}</p>` : ''}
-        </div>
-        <div class="informe-seccion">
-            <h3>${idioma === 'es' ? 'Costos y Proyección' : 'Costs and Projection'}</h3>
-            <p>${idioma === 'es'
-                ? `Desviación de costo (CV): ${formatearMoneda(cv)}. Sobrecosto: ${sobrecostoPct.toFixed(1)}%. EAC: ${formatearMoneda(eacSel)}. VAC: ${formatearMoneda(vacSel)}.`
-                : `CV: ${formatearMoneda(cv)}. Overrun: ${sobrecostoPct.toFixed(1)}%. EAC: ${formatearMoneda(eacSel)}. VAC: ${formatearMoneda(vacSel)}.`}
+                ? `Hay ${m.critCount} actividades críticas (sin margen de espera). Cualquier retraso en ellas retrasa la entrega final.`
+                : `${m.critCount} critical activities (zero slack). Any delay affects final delivery.`}
             </p>
         </div>
-        <div class="informe-conclusion">
+
+        <div class="informe-seccion">
+            <h3>${idioma === 'es' ? 'Avance de costos' : 'Cost Progress'}</h3>
+            <p>${txtCosto}</p>
+            <table class="tabla-proyecciones">
+                <tr>
+                    <th>${idioma === 'es' ? 'Escenario' : 'Scenario'}</th>
+                    <th>${idioma === 'es' ? 'Qué significa' : 'Meaning'}</th>
+                    <th>${idioma === 'es' ? 'Costo final estimado' : 'Est. final cost'}</th>
+                    <th>${idioma === 'es' ? 'Diferencia vs presupuesto' : 'Vs budget'}</th>
+                </tr>
+                ${m.escenarios.map(e => {
+                    const nom = e.key === 'atipico' ? (idioma === 'es' ? 'Optimista' : 'Optimistic')
+                        : e.key === 'tipico' ? (idioma === 'es' ? 'Moderado' : 'Moderate')
+                            : (idioma === 'es' ? 'Conservador' : 'Conservative');
+                    const desc = e.key === 'atipico'
+                        ? (idioma === 'es' ? 'El resto se gasta según lo planificado' : 'Remaining spent as planned')
+                        : e.key === 'tipico'
+                            ? (idioma === 'es' ? 'Se mantiene la eficiencia actual de gasto' : 'Current spending efficiency continues')
+                            : (idioma === 'es' ? 'Considera retrasos y sobrecostos actuales' : 'Accounts for current delays and overruns');
+                    const sel = e.key === escenarioETC ? ' ✓' : '';
+                    return `<tr class="${e.key === escenarioETC ? 'fila-escenario-seleccionado' : ''}">
+                        <td>${nom}${sel}</td><td>${desc}</td>
+                        <td>${formatearMoneda(e.eac)}</td>
+                        <td class="${e.vac >= 0 ? 'txt-ok' : 'txt-bad'}">${formatearMoneda(e.vac)}</td>
+                    </tr>`;
+                }).join('')}
+            </table>
+        </div>
+
+        <div class="informe-seccion">
+            <h3>${idioma === 'es' ? 'Curva de avance acumulado' : 'Cumulative Progress Curve'}</h3>
+            <p class="informe-nota">${idioma === 'es'
+                ? 'Compara lo planificado, lo realmente avanzado y lo gastado a lo largo del tiempo.'
+                : 'Compares planned progress, actual progress and spending over time.'}</p>
+            <div class="informe-grafica"><canvas id="informeCurvaS" height="120"></canvas></div>
+        </div>
+
+        <div class="informe-seccion">
+            <h3>${idioma === 'es' ? 'Comparación de escenarios de costo final' : 'Final Cost Scenarios'}</h3>
+            <div class="informe-grafica"><canvas id="informeEscenarios" height="100"></canvas></div>
+        </div>
+
+        <div class="informe-seccion">
+            <h3>${idioma === 'es' ? 'Diagrama de red del proyecto' : 'Project Network Diagram'}</h3>
+            <p class="informe-nota">${t('pdmHint')}</p>
+            <div class="pdm-container informe-pdm">${generarSvgDiagramaPDM(true)}</div>
+        </div>
+
+        <div class="informe-seccion informe-conclusion">
             <strong>${idioma === 'es' ? 'Conclusiones' : 'Conclusions'}</strong>
-            <p>${(spi < 1 && cpi < 1)
-                ? (idioma === 'es' ? 'El proyecto presenta desviaciones adversas en tiempo y costo. Requiere acciones correctivas inmediatas.' : 'Project shows adverse time and cost deviations. Immediate corrective actions required.')
-                : (spi < 1 || cpi < 1)
-                    ? (idioma === 'es' ? 'El proyecto muestra desviación en tiempo o costo. Monitoreo reforzado recomendado.' : 'Project shows schedule or cost deviation. Enhanced monitoring recommended.')
-                    : (idioma === 'es' ? 'El proyecto se mantiene dentro de los parámetros planificados de cronograma y costo.' : 'Project remains within planned schedule and cost parameters.')}</p>
+            <p>${(m.spi < 1 && m.cpi < 1)
+                ? (idioma === 'es'
+                    ? 'El proyecto presenta retrasos en el cronograma y sobrecostos. Se requieren acciones correctivas de inmediato para evitar un impacto mayor en plazo y presupuesto.'
+                    : 'Project shows schedule delays and cost overruns. Immediate corrective action required.')
+                : (m.spi < 1 || m.cpi < 1)
+                    ? (idioma === 'es'
+                        ? 'El proyecto muestra una desviación en tiempo o en costo. Conviene reforzar el seguimiento semanal.'
+                        : 'Project shows a schedule or cost deviation. Enhanced weekly monitoring recommended.')
+                    : (idioma === 'es'
+                        ? 'El proyecto se mantiene dentro de los plazos y costos planificados.'
+                        : 'Project remains within planned schedule and cost.')}</p>
         </div>
-        <div class="informe-recomendacion">
+
+        <div class="informe-seccion informe-recomendacion">
             <strong>${idioma === 'es' ? 'Recomendaciones' : 'Recommendations'}</strong>
-            <ul style="margin:8px 0 0 20px;">
-                ${spi < 1 ? `<li>${idioma === 'es' ? 'Priorizar actividades de ruta crítica y evaluar recursos adicionales.' : 'Prioritize critical path activities and evaluate additional resources.'}</li>` : ''}
-                ${cpi < 1 ? `<li>${idioma === 'es' ? 'Revisar partidas con sobrecosto y negociar con proveedores.' : 'Review over-budget items and negotiate with suppliers.'}</li>` : ''}
-                <li>${idioma === 'es' ? 'Actualizar seguimiento EVM semanalmente y documentar en bitácora.' : 'Update EVM tracking weekly and document in logbook.'}</li>
+            <ul class="informe-lista-rec">
+                ${m.spi < 1 ? `<li>${idioma === 'es' ? 'Priorizar las actividades de la ruta crítica y evaluar recursos adicionales para recuperar el retraso.' : 'Prioritize critical path activities and consider additional resources.'}</li>` : ''}
+                ${m.cpi < 1 ? `<li>${idioma === 'es' ? 'Revisar las partidas con mayor gasto y negociar con proveedores para controlar el sobrecosto.' : 'Review high-cost items and negotiate with suppliers.'}</li>` : ''}
+                <li>${idioma === 'es' ? 'Actualizar el avance físico y los costos cada semana, registrando decisiones en la bitácora del proyecto.' : 'Update physical progress and costs weekly; log decisions in the project logbook.'}</li>
+                <li>${idioma === 'es' ? 'Revisar el diagrama de red para identificar actividades con holgura que puedan absorber retrasos menores.' : 'Review the network diagram to find activities with slack that can absorb minor delays.'}</li>
             </ul>
         </div>`;
 
     dibujarCurvaSInforme();
-    dibujarEscenariosInforme(bac, ev, ac, cpi, spi);
+    dibujarEscenariosInforme(m.bac, m.ev, m.ac, m.cpi, m.spi);
 }
 
 function dibujarCurvaSInforme() {
@@ -2501,17 +3187,24 @@ function dibujarCurvaSInforme() {
     if (!canvas || typeof Chart === 'undefined' || !periodosEVM.length) return;
     if (chartInformeCurvaS) chartInformeCurvaS.destroy();
     const idxCorte = diaCorte - 1;
+    const lblPlan = idioma === 'es' ? 'Lo planificado' : 'Planned';
+    const lblAvance = idioma === 'es' ? 'Trabajo completado' : 'Work completed';
+    const lblGasto = idioma === 'es' ? 'Dinero gastado' : 'Money spent';
     chartInformeCurvaS = new Chart(canvas, {
         type: 'line',
         data: {
             labels: periodosEVM.map(p => getEtiquetaTiempo(p.tiempo)),
             datasets: [
-                { label: 'PV', data: periodosEVM.map(p => p.pptoAcum), borderColor: '#059669', tension: 0.3 },
-                { label: 'EV', data: periodosEVM.map((p, i) => i <= idxCorte ? p.trabajoAcum : null), borderColor: '#f97316', tension: 0.3 },
-                { label: 'AC', data: periodosEVM.map((p, i) => i <= idxCorte ? p.costoAcum : null), borderColor: '#7c3aed', tension: 0.3 }
+                { label: lblPlan, data: periodosEVM.map(p => p.pptoAcum), borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.08)', fill: true, tension: 0.3 },
+                { label: lblAvance, data: periodosEVM.map((p, i) => i <= idxCorte ? p.trabajoAcum : null), borderColor: '#f97316', tension: 0.3 },
+                { label: lblGasto, data: periodosEVM.map((p, i) => i <= idxCorte ? p.costoAcum : null), borderColor: '#7c3aed', tension: 0.3 }
             ]
         },
-        options: { responsive: true, scales: { y: { ticks: { callback: v => formatearMoneda(v) } } } }
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+            scales: { y: { ticks: { callback: v => formatearMoneda(v) } } }
+        }
     });
 }
 
@@ -2520,12 +3213,32 @@ function dibujarEscenariosInforme(bac, ev, ac, cpi, spi) {
     if (!canvas || typeof Chart === 'undefined') return;
     if (chartInformeEscenarios) chartInformeEscenarios.destroy();
     const keys = ['atipico', 'tipico', 'probable'];
-    const nombres = keys.map(k => k === 'atipico' ? (idioma === 'es' ? 'Atípico' : 'Atypical') : k === 'tipico' ? (idioma === 'es' ? 'Típico' : 'Typical') : (idioma === 'es' ? 'Probable' : 'Probable'));
+    const nombres = keys.map(k => k === 'atipico'
+        ? (idioma === 'es' ? 'Optimista' : 'Optimistic')
+        : k === 'tipico' ? (idioma === 'es' ? 'Moderado' : 'Moderate')
+            : (idioma === 'es' ? 'Conservador' : 'Conservative'));
     const eacs = keys.map(k => ac + getETCEscenario(k, bac, ev, cpi, spi));
+    const lbl = idioma === 'es' ? 'Costo final estimado' : 'Estimated final cost';
     chartInformeEscenarios = new Chart(canvas, {
         type: 'bar',
-        data: { labels: nombres, datasets: [{ label: 'EAC', data: eacs, backgroundColor: ['#94a3b8', '#64748b', '#c8102e'] }] },
-        options: { responsive: true, scales: { y: { ticks: { callback: v => formatearMoneda(v) } } } }
+        data: {
+            labels: nombres,
+            datasets: [{
+                label: lbl,
+                data: eacs,
+                backgroundColor: ['#86efac', '#fcd34d', '#fca5a5']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    ticks: { callback: v => formatearMoneda(v) },
+                    suggestedMin: 0
+                }
+            }
+        }
     });
 }
 
