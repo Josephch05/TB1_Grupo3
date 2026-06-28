@@ -302,10 +302,10 @@ th { background: #f8fafc; color: var(--color-primario); font-weight: 700; font-s
 .informe-conclusion { background: #f0f9ff; border-left: 4px solid #0284c7; }
 .informe-recomendacion { background: #f8fafc; border-left: 4px solid var(--color-primario); }
 .pdm-container {
-    overflow-x: auto; border: 1px solid var(--color-borde);
+    overflow-x: auto; overflow-y: hidden; border: 1px solid var(--color-borde);
     border-radius: 8px; padding: 16px; background: #fafafa; min-height: 120px;
 }
-.pdm-svg { width: 100%; height: auto; min-width: 520px; display: block; }
+.pdm-svg { width: 100%; height: auto; min-width: 100%; display: block; max-width: none; }
 .cuadro-hito {
     width: 16px; height: 16px; background: #fef3c7; border: 2px solid #f59e0b;
     transform: rotate(45deg); display: inline-block; border-radius: 2px;
